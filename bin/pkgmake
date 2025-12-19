@@ -1,5 +1,6 @@
-#!/bin/sh
-# pkgmake — makepkg-like tool for XBPS (package + local repo)
+#!/usr/bin/env bash
+# pkgmake — makepkg-like tool for XBPS (Arch-compatible)
+
 set -e
 
 WORKDIR="$PWD"
@@ -18,47 +19,84 @@ die() { echo "erro: $*" >&2; exit 1; }
 msg() { echo "==> $*"; }
 
 load_pkgfile() {
-  [ -f PKGFILE ] || die "PKGFILE não encontrado"
-  . ./PKGFILE
+  [[ -f PKGFILE ]] || die "PKGFILE não encontrado"
+  source ./PKGFILE
+
   : "${pkgname:?}"
   : "${pkgver:?}"
   : "${pkgrel:?}"
   : "${pkgdesc:?}"
   : "${license:?}"
-  : "${source:?}"
+
+  if declare -p source &>/dev/null; then
+    if [[ "$(declare -p source)" == "declare -a"* ]]; then
+      SRC="${source[0]}"
+    else
+      SRC="$source"
+    fi
+  else
+    die "source não definido"
+  fi
+
+  SRC="${SRC#*::}"
+  [[ -n "$SRC" ]] || die "source vazio"
 }
 
 sync_deps() {
-  [ "$SYNCDEPS" -eq 1 ] || return 0
-  pkgs="$makedepends $depends"
-  [ -z "$pkgs" ] && return 0
-  sudo xbps-install -Sy $pkgs
+  [[ "$SYNCDEPS" -eq 1 ]] || return 0
+
+  pkgs=()
+  [[ -n "${makedepends[*]}" ]] && pkgs+=("${makedepends[@]}")
+  [[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
+
+  [[ "${#pkgs[@]}" -eq 0 ]] && return 0
+  sudo xbps-install -Sy "${pkgs[@]}"
 }
 
 lint() {
-  command -v build   >/dev/null || die "função build() ausente"
-  command -v package >/dev/null || die "função package() ausente"
+  declare -f build   >/dev/null || die "função build() ausente"
+  declare -f package >/dev/null || die "função package() ausente"
 }
 
 fetch() {
   mkdir -p "$SRCDIR"
   cd "$SRCDIR"
-  file="${source##*/}"
-  [ -f "$file" ] || curl -L -o "$file" "$source"
-}
 
-extract() {
-  cd "$SRCDIR"
-  tar xf "${source##*/}"
-  cd "${pkgname}-${pkgver}" || die "diretório source inválido"
+  case "$SRC" in
+    git+*)
+      src="${SRC#git+}"
+      repo="${src%%#*}"
+      ref="${src#"$repo"}"
+      ref="${ref#\#}"
+
+      msg "Clone git repository"
+      rm -rf "$pkgname"
+      git clone "$repo" "$pkgname"
+      cd "$pkgname"
+
+      case "$ref" in
+        tag=*)    git checkout "${ref#tag=}" ;;
+        commit=*) git checkout "${ref#commit=}" ;;
+        branch=*) git checkout "${ref#branch=}" ;;
+        "" )      : ;;
+        * ) die "ref git inválida: $ref" ;;
+      esac
+      ;;
+    *)
+      file="${SRC##*/}"
+      [[ -f "$file" ]] || curl -L -o "$file" "$SRC"
+      tar xf "$file"
+      cd "${pkgname}-${pkgver}" || die "diretório source inválido"
+      ;;
+  esac
 }
 
 find_privkey() {
-  [ -n "$PRIVKEY" ] && return 0
+  [[ -n "$PRIVKEY" ]] && return 0
   for k in "$HOME/.gnupg/privkey.pem" "$HOME/.gnupg/private.pem"; do
-    [ -f "$k" ] && { PRIVKEY="$k"; return 0; }
+    [[ -f "$k" ]] && { PRIVKEY="$k"; return 0; }
   done
-  die "chave privada não encontrada (use --privkey ou ~/.gnupg/privkey.pem|private.pem)"
+  die "chave privada não encontrada"
 }
 
 run_all() {
@@ -67,13 +105,10 @@ run_all() {
 
   sync_deps
 
-  msg "Fetch"
+  msg "Fetch source"
   fetch
 
-  msg "Extract"
-  extract
-
-  if command -v prepare >/dev/null; then
+  if declare -f prepare >/dev/null; then
     msg "Prepare"
     prepare
   fi
@@ -95,31 +130,33 @@ run_all() {
 
   PKGFILE_OUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
 
-  msg "Create local repo"
   mkdir -p "$REPODIR"
-  mv "$PKGFILE_OUT" "$REPODIR/"
+  mv -f "$PKGFILE_OUT" "$REPODIR/"
 
-  if [ "$SIGNPKG" -eq 1 ]; then
+  if [[ "$SIGNPKG" -eq 1 ]]; then
     find_privkey
     msg "Sign package"
     xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$REPODIR/$PKGFILE_OUT"
   fi
 
-  msg "Update repodata"
+  msg "Recreate repodata (hard reset)"
+  rm -f "$REPODIR"/*-repodata "$REPODIR"/*.sig2
+  xbps-rindex -r "$REPODIR"
   xbps-rindex -a "$REPODIR"/*.xbps
 
-  msg "Done"
-
-  if [ "$INSTALLPKG" -eq 1 ]; then
-    msg "Install package"
-    if [ "$FORCEPKG" -eq 1 ]; then
-      sudo xbps-install -f -R "$REPODIR" -S "${pkgname}"
+  if [[ "$INSTALLPKG" -eq 1 ]]; then
+    if [[ "$FORCEPKG" -eq 1 ]]; then
+      sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
     else
-      sudo xbps-install -R "$REPODIR" -S "${pkgname}"
+      sudo xbps-install -R "$REPODIR" -S "$pkgname"
     fi
   else
     msg "Install with:"
-    msg "  sudo xbps-install -R $REPODIR -S ${pkgname}"
+    if [[ "$FORCEPKG" -eq 1 ]]; then
+      msg "  sudo xbps-install -R $REPODIR -S -f $pkgname"
+    else
+      msg "  sudo xbps-install -R $REPODIR -S $pkgname"
+    fi
   fi
 }
 
@@ -129,18 +166,18 @@ clean() {
 
 usage() {
   cat <<EOF
-uso: pkgmake [-s] [-i] [-f] [--sign [--privkey KEY]] [-c]
+uso: pkgmake [opções]
 
 -s, --syncdeps     instalar depends e makedepends
 -i, --install      instalar pacote após build
--f, --force        sobrescrever pacote existente
---sign             assinar o pacote (.sig2)
+-f, --force        forçar reinstalação
+--sign             assinar pacote (.sig2)
 --privkey KEY      chave RSA PEM
--c                 limpar diretórios gerados
+-c                 limpar diretórios
 EOF
 }
 
-while [ $# -gt 0 ]; do
+while [[ $# -gt 0 ]]; do
   case "$1" in
     -s|--syncdeps) SYNCDEPS=1; shift ;;
     -i|--install) INSTALLPKG=1; shift ;;
@@ -155,4 +192,3 @@ done
 
 load_pkgfile
 run_all
-

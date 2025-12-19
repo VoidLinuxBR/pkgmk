@@ -1,21 +1,63 @@
-#!/bin/sh
+#!/usr/bin/env bash
+# pkgnew — create PKGFILE skeleton or import from Arch PKGBUILD
+set -e
 
-pkg="$1"
-shift
+die() { echo "erro: $*" >&2; exit 1; }
+msg() { echo "==> $*"; }
 
-cat > Pkgfile <<EOF
-# Maintainer: $USER
+FROM_ARCH=0
+PKGNAME=""
 
-pkgname=$pkg
-pkgver=1.0.0
+usage() {
+  cat <<EOF
+uso:
+  pkgnew <nome>
+  pkgnew --from-arch <nome>
+
+Opções:
+  --from-arch   importar PKGBUILD do Arch/AUR (quase cru)
+EOF
+}
+
+# -------- argumentos --------
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --from-arch) FROM_ARCH=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      [[ -z "$PKGNAME" ]] && PKGNAME="$1" || die "argumento extra: $1"
+      shift
+      ;;
+  esac
+done
+
+[[ -z "$PKGNAME" ]] && usage && exit 1
+[[ -e "$PKGNAME" ]] && die "diretório '$PKGNAME' já existe"
+
+mkdir -p "$PKGNAME/files"
+cd "$PKGNAME"
+
+# -------------------------------------------------
+# MODO SIMPLES
+# -------------------------------------------------
+if [[ "$FROM_ARCH" -eq 0 ]]; then
+  cat > PKGFILE <<EOF
+# Maintainer: $(whoami)
+
+pkgname=$PKGNAME
+pkgver=0.0.0
 pkgrel=1
 pkgdesc=""
-arch="x86_64"
-license="MIT"
-depends=""
-makedepends=""
-source=""
-sha256="SKIP"
+license=()
+
+depends=()
+makedepends=()
+
+source=()
+
+prepare() {
+  :
+}
 
 build() {
   :
@@ -25,6 +67,40 @@ package() {
   :
 }
 EOF
+  msg "Done"
+  exit 0
+fi
 
-mkdir -p files
-echo "Pacote $pkg criado."
+# -------------------------------------------------
+# MODO --from-arch
+# -------------------------------------------------
+msg "Fetch PKGBUILD from Arch/AUR"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+if ! curl -fsSL \
+  "https://gitlab.archlinux.org/archlinux/packaging/packages/$PKGNAME/-/raw/main/PKGBUILD" \
+  -o "$TMP/PKGBUILD"; then
+  curl -fsSL \
+    "https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=$PKGNAME" \
+    -o "$TMP/PKGBUILD" || die "PKGBUILD não encontrado"
+fi
+
+# -------------------------------------------------
+# GERA PKGFILE (SEM MUTILAR source)
+# -------------------------------------------------
+{
+  echo "# NOTE: Imported from Arch PKGBUILD"
+  echo "# NOTE: This PKGFILE is PARTIAL and MUST be reviewed"
+  echo
+
+  # remove linhas que quebram execução fora do makepkg
+  sed \
+    -e '/^pkgbase=/d' \
+    -e '/^validpgpkeys=/d' \
+    -e '/^_.*=/d' \
+    "$TMP/PKGBUILD"
+} > PKGFILE
+
+msg "Done (review PKGFILE before building)"
