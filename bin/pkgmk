@@ -11,8 +11,8 @@ ARCH="$(uname -m)"
 die() { echo "erro: $*" >&2; exit 1; }
 
 load_pkgfile() {
-  [ -f Pkgfile ] || die "Pkgfile não encontrado"
-  . ./Pkgfile
+  [ -f PKGFILE ] || die "PKGFILE não encontrado"
+  . ./PKGFILE
   : "${pkgname:?}"
   : "${pkgver:?}"
   : "${pkgrel:?}"
