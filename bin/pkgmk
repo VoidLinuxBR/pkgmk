@@ -1,8 +1,7 @@
 #!/bin/sh
-# pkgmk — makepkg-like tool for XBPS
+# pkgmk — fluxo único estilo makepkg para XBPS
 set -e
 
-# diretórios
 WORKDIR="$PWD"
 SRCDIR="$WORKDIR/src"
 PKGDIR="$WORKDIR/pkg"
@@ -12,7 +11,7 @@ ARCH="$(uname -m)"
 die() { echo "erro: $*" >&2; exit 1; }
 msg() { echo "==> $*"; }
 
-# carrega PKGFILE
+# -------- carregar PKGFILE --------
 load_pkgfile() {
   [ -f PKGFILE ] || die "PKGFILE não encontrado"
   . ./PKGFILE
@@ -25,7 +24,19 @@ load_pkgfile() {
   : "${source:?}"
 }
 
-# baixa source
+# -------- checagens --------
+check_funcs() {
+  command -v build   >/dev/null || die "função build() ausente"
+  command -v package >/dev/null || die "função package() ausente"
+}
+
+check_makedepends() {
+  for d in $makedepends; do
+    command -v "$d" >/dev/null 2>&1 || die "makedependency ausente: $d"
+  done
+}
+
+# -------- source --------
 fetch() {
   mkdir -p "$SRCDIR"
   cd "$SRCDIR"
@@ -33,28 +44,17 @@ fetch() {
   [ -f "$file" ] || curl -L -o "$file" "$source"
 }
 
-# extrai source
 extract() {
   cd "$SRCDIR"
   tar xf "${source##*/}"
   cd "${pkgname}-${pkgver}" || die "diretório source inválido"
 }
 
-# fases
-run_prepare() { command -v prepare >/dev/null && prepare; }
-run_build()   { command -v build   >/dev/null || die "build() ausente"; build; }
-run_package() { command -v package >/dev/null || die "package() ausente"; package; }
-
-# lint básico
-lint() {
-  command -v build   >/dev/null || die "função build() ausente"
-  command -v package >/dev/null || die "função package() ausente"
-}
-
-# fluxo completo (default)
+# -------- fluxo --------
 run_all() {
   msg "Lint"
-  lint
+  check_funcs
+  check_makedepends
 
   msg "Fetch"
   fetch
@@ -62,15 +62,17 @@ run_all() {
   msg "Extract"
   extract
 
-  msg "Prepare"
-  run_prepare || true
+  if command -v prepare >/dev/null; then
+    msg "Prepare"
+    prepare
+  fi
 
   msg "Build"
-  run_build
+  build
 
   msg "Package (staging)"
   mkdir -p "$PKGDIR"
-  run_package
+  package
 
   msg "Create XBPS"
   mkdir -p "$REPODIR"
@@ -84,8 +86,6 @@ run_all() {
     "$PKGDIR"
 
   mv "${pkgname}-${pkgver}_${pkgrel}.xbps" "$REPODIR/"
-
-  msg "Sign repository"
   xbps-rindex -a "$REPODIR/${pkgname}-${pkgver}_${pkgrel}.xbps"
 
   msg "Done"
@@ -96,16 +96,7 @@ clean() {
 }
 
 usage() {
-  cat <<EOF
-uso: pkgmk [opção]
-
-Sem opção:
-  executa fluxo completo (lint + build + package + sign)
-
-Opções:
-  -c   clean
-  -h   ajuda
-EOF
+  echo "uso: pkgmk [-c]"
 }
 
 # -------- main --------
@@ -114,6 +105,6 @@ load_pkgfile
 case "$1" in
   "" ) run_all ;;
   -c ) clean ;;
-  -h ) usage ;;
   *  ) usage; exit 1 ;;
 esac
+
