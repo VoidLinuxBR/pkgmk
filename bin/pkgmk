@@ -1,65 +1,79 @@
 #!/bin/sh
+# pkgmk — makepkg-like tool for XBPS
 set -e
 
+# diretórios
 WORKDIR="$PWD"
 SRCDIR="$WORKDIR/src"
 PKGDIR="$WORKDIR/pkg"
-DISTDIR="$WORKDIR/dist"
 REPODIR="$WORKDIR/repo"
 ARCH="$(uname -m)"
 
 die() { echo "erro: $*" >&2; exit 1; }
+msg() { echo "==> $*"; }
 
+# carrega PKGFILE
 load_pkgfile() {
   [ -f PKGFILE ] || die "PKGFILE não encontrado"
   . ./PKGFILE
+
   : "${pkgname:?}"
   : "${pkgver:?}"
   : "${pkgrel:?}"
+  : "${pkgdesc:?}"
+  : "${license:?}"
+  : "${source:?}"
 }
 
+# baixa source
 fetch() {
   mkdir -p "$SRCDIR"
   cd "$SRCDIR"
-  [ -f "${source##*/}" ] || curl -LO "$source"
+  file="${source##*/}"
+  [ -f "$file" ] || curl -L -o "$file" "$source"
 }
 
+# extrai source
 extract() {
+  cd "$SRCDIR"
   tar xf "${source##*/}"
-  cd "${pkgname}-${pkgver}"
+  cd "${pkgname}-${pkgver}" || die "diretório source inválido"
 }
 
-cmd_build() {
-  load_pkgfile
-  fetch
-  extract
-  prepare 2>/dev/null || true
-  build
-}
+# fases
+run_prepare() { command -v prepare >/dev/null && prepare; }
+run_build()   { command -v build   >/dev/null || die "build() ausente"; build; }
+run_package() { command -v package >/dev/null || die "package() ausente"; package; }
 
-cmd_package() {
-  load_pkgfile
-  mkdir -p "$PKGDIR"
-  cd "$SRCDIR/${pkgname}-${pkgver}"
-  package
-}
-
-cmd_lint() {
-  load_pkgfile
-  command -v build >/dev/null || die "função build() ausente"
+# lint básico
+lint() {
+  command -v build   >/dev/null || die "função build() ausente"
   command -v package >/dev/null || die "função package() ausente"
 }
 
-cmd_clean() {
-  rm -rf "$SRCDIR" "$PKGDIR" "$DISTDIR" "$REPODIR"
-}
+# fluxo completo (default)
+run_all() {
+  msg "Lint"
+  lint
 
-cmd_release() {
-  cmd_lint
-  cmd_build
-  cmd_package
+  msg "Fetch"
+  fetch
 
-  mkdir -p "$DISTDIR" "$REPODIR"
+  msg "Extract"
+  extract
+
+  msg "Prepare"
+  run_prepare || true
+
+  msg "Build"
+  run_build
+
+  msg "Package (staging)"
+  mkdir -p "$PKGDIR"
+  run_package
+
+  msg "Create XBPS"
+  mkdir -p "$REPODIR"
 
   xbps-create \
     -A "$ARCH" \
@@ -70,17 +84,36 @@ cmd_release() {
     "$PKGDIR"
 
   mv "${pkgname}-${pkgver}_${pkgrel}.xbps" "$REPODIR/"
+
+  msg "Sign repository"
   xbps-rindex -a "$REPODIR/${pkgname}-${pkgver}_${pkgrel}.xbps"
+
+  msg "Done"
 }
 
+clean() {
+  rm -rf "$SRCDIR" "$PKGDIR" "$REPODIR"
+}
+
+usage() {
+  cat <<EOF
+uso: pkgmk [opção]
+
+Sem opção:
+  executa fluxo completo (lint + build + package + sign)
+
+Opções:
+  -c   clean
+  -h   ajuda
+EOF
+}
+
+# -------- main --------
+load_pkgfile
+
 case "$1" in
-  build)   cmd_build ;;
-  package) cmd_package ;;
-  lint)    cmd_lint ;;
-  clean)   cmd_clean ;;
-  release|--sign) cmd_release ;;
-  *)
-    echo "uso: pkgmk {build|package|lint|clean|release|--sign}"
-    exit 1
-    ;;
+  "" ) run_all ;;
+  -c ) clean ;;
+  -h ) usage ;;
+  *  ) usage; exit 1 ;;
 esac
