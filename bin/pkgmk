@@ -1,0 +1,86 @@
+#!/bin/sh
+set -e
+
+WORKDIR="$PWD"
+SRCDIR="$WORKDIR/src"
+PKGDIR="$WORKDIR/pkg"
+DISTDIR="$WORKDIR/dist"
+REPODIR="$WORKDIR/repo"
+ARCH="$(uname -m)"
+
+die() { echo "erro: $*" >&2; exit 1; }
+
+load_pkgfile() {
+  [ -f Pkgfile ] || die "Pkgfile não encontrado"
+  . ./Pkgfile
+  : "${pkgname:?}"
+  : "${pkgver:?}"
+  : "${pkgrel:?}"
+}
+
+fetch() {
+  mkdir -p "$SRCDIR"
+  cd "$SRCDIR"
+  [ -f "${source##*/}" ] || curl -LO "$source"
+}
+
+extract() {
+  tar xf "${source##*/}"
+  cd "${pkgname}-${pkgver}"
+}
+
+cmd_build() {
+  load_pkgfile
+  fetch
+  extract
+  prepare 2>/dev/null || true
+  build
+}
+
+cmd_package() {
+  load_pkgfile
+  mkdir -p "$PKGDIR"
+  cd "$SRCDIR/${pkgname}-${pkgver}"
+  package
+}
+
+cmd_lint() {
+  load_pkgfile
+  command -v build >/dev/null || die "função build() ausente"
+  command -v package >/dev/null || die "função package() ausente"
+}
+
+cmd_clean() {
+  rm -rf "$SRCDIR" "$PKGDIR" "$DISTDIR" "$REPODIR"
+}
+
+cmd_release() {
+  cmd_lint
+  cmd_build
+  cmd_package
+
+  mkdir -p "$DISTDIR" "$REPODIR"
+
+  xbps-create \
+    -A "$ARCH" \
+    -n "${pkgname}-${pkgver}_${pkgrel}" \
+    -s "$pkgdesc" \
+    -l "$license" \
+    ${depends:+-D "$depends"} \
+    "$PKGDIR"
+
+  mv "${pkgname}-${pkgver}_${pkgrel}.xbps" "$REPODIR/"
+  xbps-rindex -a "$REPODIR/${pkgname}-${pkgver}_${pkgrel}.xbps"
+}
+
+case "$1" in
+  build)   cmd_build ;;
+  package) cmd_package ;;
+  lint)    cmd_lint ;;
+  clean)   cmd_clean ;;
+  release|--sign) cmd_release ;;
+  *)
+    echo "uso: pkgmk {build|package|lint|clean|release|--sign}"
+    exit 1
+    ;;
+esac

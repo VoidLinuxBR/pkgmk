@@ -1,0 +1,30 @@
+#!/bin/sh
+
+pkg="$1"
+shift
+
+cat > Pkgfile <<EOF
+# Maintainer: $USER
+
+pkgname=$pkg
+pkgver=1.0.0
+pkgrel=1
+pkgdesc=""
+arch="x86_64"
+license="MIT"
+depends=""
+makedepends=""
+source=""
+sha256="SKIP"
+
+build() {
+  :
+}
+
+package() {
+  :
+}
+EOF
+
+mkdir -p files
+echo "Pacote $pkg criado."
