@@ -1,15 +1,17 @@
 #!/bin/sh
-# pkgmake — makepkg-like tool for XBPS (package-only)
+# pkgmake — makepkg-like tool for XBPS (package + local repo)
 set -e
 
 WORKDIR="$PWD"
 SRCDIR="$WORKDIR/src"
 PKGDIR="$WORKDIR/pkg"
-OUTDIR="$WORKDIR"
+REPODIR="$WORKDIR/repo"
 ARCH="$(uname -m)"
 
 SYNCDEPS=0
 SIGNPKG=0
+INSTALLPKG=0
+FORCEPKG=0
 PRIVKEY=""
 
 die() { echo "erro: $*" >&2; exit 1; }
@@ -18,7 +20,6 @@ msg() { echo "==> $*"; }
 load_pkgfile() {
   [ -f PKGFILE ] || die "PKGFILE não encontrado"
   . ./PKGFILE
-
   : "${pkgname:?}"
   : "${pkgver:?}"
   : "${pkgrel:?}"
@@ -54,12 +55,10 @@ extract() {
 
 find_privkey() {
   [ -n "$PRIVKEY" ] && return 0
-
   for k in "$HOME/.gnupg/privkey.pem" "$HOME/.gnupg/private.pem"; do
     [ -f "$k" ] && { PRIVKEY="$k"; return 0; }
   done
-
-  die "chave privada não encontrada (use --privkey ou coloque privkey.pem/private.pem em ~/.gnupg)"
+  die "chave privada não encontrada (use --privkey ou ~/.gnupg/privkey.pem|private.pem)"
 }
 
 run_all() {
@@ -92,39 +91,60 @@ run_all() {
     -n "${pkgname}-${pkgver}_${pkgrel}" \
     -s "$pkgdesc" \
     -l "$license" \
-    ${depends:+-D "$depends"} \
     "$PKGDIR"
 
   PKGFILE_OUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
-  mv "$PKGFILE_OUT" "$OUTDIR/"
+
+  msg "Create local repo"
+  mkdir -p "$REPODIR"
+  mv "$PKGFILE_OUT" "$REPODIR/"
 
   if [ "$SIGNPKG" -eq 1 ]; then
     find_privkey
     msg "Sign package"
-    xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$OUTDIR/$PKGFILE_OUT"
+    xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$REPODIR/$PKGFILE_OUT"
   fi
 
-  msg "Done: $OUTDIR/$PKGFILE_OUT"
+  msg "Update repodata"
+  xbps-rindex -a "$REPODIR"/*.xbps
+
+  msg "Done"
+
+  if [ "$INSTALLPKG" -eq 1 ]; then
+    msg "Install package"
+    if [ "$FORCEPKG" -eq 1 ]; then
+      sudo xbps-install -f -R "$REPODIR" -S "${pkgname}"
+    else
+      sudo xbps-install -R "$REPODIR" -S "${pkgname}"
+    fi
+  else
+    msg "Install with:"
+    msg "  sudo xbps-install -R $REPODIR -S ${pkgname}"
+  fi
 }
 
 clean() {
-  rm -rf "$SRCDIR" "$PKGDIR"
+  rm -rf "$SRCDIR" "$PKGDIR" "$REPODIR"
 }
 
 usage() {
   cat <<EOF
-uso: pkgmake [-s] [--sign [--privkey KEY]] [-c]
+uso: pkgmake [-s] [-i] [-f] [--sign [--privkey KEY]] [-c]
 
--s              instalar depends e makedepends
---sign          assinar o pacote resultante (.sig2)
---privkey KEY   chave RSA PEM (default: ~/.gnupg/privkey.pem ou private.pem)
--c              limpar diretórios gerados
+-s, --syncdeps     instalar depends e makedepends
+-i, --install      instalar pacote após build
+-f, --force        sobrescrever pacote existente
+--sign             assinar o pacote (.sig2)
+--privkey KEY      chave RSA PEM
+-c                 limpar diretórios gerados
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    -s) SYNCDEPS=1; shift ;;
+    -s|--syncdeps) SYNCDEPS=1; shift ;;
+    -i|--install) INSTALLPKG=1; shift ;;
+    -f|--force) FORCEPKG=1; shift ;;
     --sign) SIGNPKG=1; shift ;;
     --privkey) PRIVKEY="$2"; shift 2 ;;
     -c) clean; exit 0 ;;
