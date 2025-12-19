@@ -3,7 +3,7 @@ BINDIR  = $(PREFIX)/bin
 SHAREDIR = $(PREFIX)/share/pkgmk
 DOCDIR = $(PREFIX)/share/doc/pkgmk
 
-BIN_FILES = bin/pkgmake bin/pkgmake
+BIN_FILES = bin/pkgnew bin/pkgmake
 SHARE_FILES = share/pkgmk/*.sh
 
 all:
