@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# pkgmake — makepkg-like tool for XBPS (Arch-compatible)
+# pkgmake — makepkg-like tool for XBPS
+# CONTRATO:
+# - pkgmake prepara ambiente e empacota
+# - package() é OBRIGATÓRIA
+# - build() e prepare() são OPCIONAIS
+# - pkgmake NÃO assume método de instalação
 
 set -e
 
@@ -54,7 +59,6 @@ sync_deps() {
 }
 
 lint() {
-  declare -f build   >/dev/null || die "função build() ausente"
   declare -f package >/dev/null || die "função package() ausente"
 }
 
@@ -86,7 +90,6 @@ fetch() {
       file="${SRC##*/}"
       [[ -f "$file" ]] || curl -L -o "$file" "$SRC"
       tar xf "$file"
-      cd "${pkgname}-${pkgver}" || die "diretório source inválido"
       ;;
   esac
 }
@@ -100,6 +103,8 @@ find_privkey() {
 }
 
 run_all() {
+  [[ "$EUID" -eq 0 ]] && die "pkgmake não deve ser executado como root"
+
   msg "Lint"
   lint
 
@@ -108,13 +113,21 @@ run_all() {
   msg "Fetch source"
   fetch
 
+  cd "$WORKDIR"
+  export srcdir="$SRCDIR"
+  export pkgdir="$PKGDIR"
+
+  [[ -n "$pkgdir" && "$pkgdir" != "/" ]] || die "pkgdir inválido"
+
   if declare -f prepare >/dev/null; then
     msg "Prepare"
     prepare
   fi
 
-  msg "Build"
-  build
+  if declare -f build >/dev/null; then
+    msg "Build"
+    build
+  fi
 
   msg "Package (staging)"
   mkdir -p "$PKGDIR"
@@ -139,7 +152,7 @@ run_all() {
     xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$REPODIR/$PKGFILE_OUT"
   fi
 
-  msg "Recreate repodata (hard reset)"
+  msg "Recreate repodata"
   rm -f "$REPODIR"/*-repodata "$REPODIR"/*.sig2
   xbps-rindex -r "$REPODIR"
   xbps-rindex -a "$REPODIR"/*.xbps
@@ -149,13 +162,6 @@ run_all() {
       sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
     else
       sudo xbps-install -R "$REPODIR" -S "$pkgname"
-    fi
-  else
-    msg "Install with:"
-    if [[ "$FORCEPKG" -eq 1 ]]; then
-      msg "  sudo xbps-install -R $REPODIR -S -f $pkgname"
-    else
-      msg "  sudo xbps-install -R $REPODIR -S $pkgname"
     fi
   fi
 }
