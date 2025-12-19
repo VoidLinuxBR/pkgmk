@@ -1,0 +1,131 @@
+#!/bin/sh
+# pkgmake — makepkg-like tool for XBPS (package-only)
+set -e
+
+WORKDIR="$PWD"
+SRCDIR="$WORKDIR/src"
+PKGDIR="$WORKDIR/pkg"
+ARCH="$(uname -m)"
+
+SYNCDEPS=0
+SIGNPKG=0
+PRIVKEY=""
+
+die() { echo "erro: $*" >&2; exit 1; }
+msg() { echo "==> $*"; }
+
+# -------- carregar PKGFILE --------
+load_pkgfile() {
+  [ -f PKGFILE ] || die "PKGFILE não encontrado"
+  . ./PKGFILE
+
+  : "${pkgname:?}"
+  : "${pkgver:?}"
+  : "${pkgrel:?}"
+  : "${pkgdesc:?}"
+  : "${license:?}"
+  : "${source:?}"
+}
+
+# -------- deps (like makepkg -s) --------
+sync_deps() {
+  [ "$SYNCDEPS" -eq 1 ] || return 0
+  pkgs="$makedepends $depends"
+  [ -z "$pkgs" ] && return 0
+  sudo xbps-install -Sy $pkgs
+}
+
+# -------- lint mínimo --------
+lint() {
+  command -v build   >/dev/null || die "função build() ausente"
+  command -v package >/dev/null || die "função package() ausente"
+}
+
+# -------- source --------
+fetch() {
+  mkdir -p "$SRCDIR"
+  cd "$SRCDIR"
+  file="${source##*/}"
+  [ -f "$file" ] || curl -L -o "$file" "$source"
+}
+
+extract() {
+  cd "$SRCDIR"
+  tar xf "${source##*/}"
+  cd "${pkgname}-${pkgver}" || die "diretório source inválido"
+}
+
+# -------- fluxo --------
+run_all() {
+  msg "Lint"
+  lint
+
+  sync_deps
+
+  msg "Fetch"
+  fetch
+
+  msg "Extract"
+  extract
+
+  if command -v prepare >/dev/null; then
+    msg "Prepare"
+    prepare
+  fi
+
+  msg "Build"
+  build
+
+  msg "Package (staging)"
+  mkdir -p "$PKGDIR"
+  package
+
+  msg "Create XBPS"
+  xbps-create \
+    -A "$ARCH" \
+    -n "${pkgname}-${pkgver}_${pkgrel}" \
+    -s "$pkgdesc" \
+    -l "$license" \
+    ${depends:+-D "$depends"} \
+    "$PKGDIR"
+
+  PKGFILE_OUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
+
+  if [ "$SIGNPKG" -eq 1 ]; then
+    [ -f "$PRIVKEY" ] || die "privkey.pem não encontrado"
+    msg "Sign package"
+    xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$PKGFILE_OUT"
+  fi
+
+  msg "Done: $PKGFILE_OUT"
+}
+
+clean() {
+  rm -rf "$SRCDIR" "$PKGDIR"
+}
+
+usage() {
+  cat <<EOF
+uso: pkgmake [-s] [--sign --privkey KEY] [-c]
+
+-s              instalar depends e makedepends
+--sign          assinar o pacote resultante (.sig2)
+--privkey KEY   chave RSA PEM para assinatura
+-c              limpar diretórios gerados
+EOF
+}
+
+# -------- main --------
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s) SYNCDEPS=1; shift ;;
+    --sign) SIGNPKG=1; shift ;;
+    --privkey) PRIVKEY="$2"; shift 2 ;;
+    -c) clean; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "opção inválida: $1" ;;
+  esac
+done
+
+load_pkgfile
+run_all
