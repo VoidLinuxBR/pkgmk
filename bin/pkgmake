@@ -35,8 +35,6 @@
 #
 # ============================================================================
 
-
-
 set -e
 
 WORKDIR="$PWD"
@@ -46,218 +44,372 @@ REPODIR="$WORKDIR/repo"
 ARCH="$(uname -m)"
 
 SYNCDEPS=0
-SIGNPKG=0
 INSTALLPKG=0
 FORCEPKG=0
 PRIVKEY=""
+SIGNPKG=0
+SIGN_ONLY=0
+QUIET=0
+GEN_KEY=0
+KEY_FILE="privkey.pem"
 
-die()  { echo "erro: $*" >&2; exit 1; }
-msg()  { echo "==> $*"; }
-warn() { echo "==> aviso: $*" >&2; }
+# ANSI colors
+reset='\033[0m'
+
+black='\033[0;30m'
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+blue='\033[0;34m'
+magenta='\033[0;35m'
+cyan='\033[0;36m'
+white='\033[0;37m'
+
+# Bold
+bold='\033[1m'
+bold_black='\033[1;30m'
+bold_red='\033[1;31m'
+bold_green='\033[1;32m'
+bold_yellow='\033[1;33m'
+bold_blue='\033[1;34m'
+bold_magenta='\033[1;35m'
+bold_cyan='\033[1;36m'
+bold_white='\033[1;37m'
+
+# Backgrounds
+bg_black='\033[40m'
+bg_red='\033[41m'
+bg_green='\033[42m'
+bg_yellow='\033[43m'
+bg_blue='\033[44m'
+bg_magenta='\033[45m'
+bg_cyan='\033[46m'
+bg_white='\033[47m'
+
+cmd_run() {
+  if [[ "$QUIET" -eq 1 ]]; then
+    "$@" >/dev/null 2>&1
+  else
+    "$@"
+  fi
+}
+
+die() { echo -e "${red}erro: $*${reset}" >&2; exit 1; }
+msg() { echo -e "${cyan}==> $*${reset}"; }
+warn() { echo -e "${yellow}==> aviso: $*${reset}" >&2; }
+
+gen_key() {
+  [[ -f "$KEY_FILE" ]] && die "chave já existe: $KEY_FILE"
+
+  msg "Gerando chave RSA 4096 bits (PEM): $KEY_FILE"
+  cmd_run ssh-keygen -t rsa -b 4096 -m PEM -f "$KEY_FILE"
+
+  msg "Chave gerada com sucesso:"
+  msg "  $KEY_FILE"
+}
 
 load_pkgfile() {
-  [[ -f PKGFILE ]] || die "PKGFILE não encontrado"
-  source ./PKGFILE
+	[[ -f PKGFILE ]] || die "PKGFILE não encontrado"
+	source ./PKGFILE
 
-  : "${pkgname:?}"
-  : "${pkgver:?}"
-  : "${pkgrel:?}"
-  : "${pkgdesc:?}"
-  : "${license:?}"
+	: "${pkgname:?}"
+	: "${pkgver:?}"
+	: "${pkgrel:?}"
+	: "${pkgdesc:?}"
+	: "${license:?}"
 
-  pkgbase="${pkgbase:-$pkgname}"
-
-  declare -p source &>/dev/null || die "source não definido"
+	pkgbase="${pkgbase:-$pkgname}"
+	declare -p source &>/dev/null || die "source não definido"
+	HAS_GIT_SOURCE=0
+	for s in "${source[@]}"; do
+		[[ "$s" == git+* ]] && HAS_GIT_SOURCE=1
+	done
 }
 
 lint() {
-  declare -f package >/dev/null || die "função package() ausente"
+	declare -f package >/dev/null || die "função package() ausente"
 
-  # Detecta PKGFILE que apaga o source (incompatível com pkgmake)
-  if grep -Eq 'rm[[:space:]]+-rf[[:space:]]+(\$|\$\{)(_pkgsrc|srcdir|pkgbase)|rm[[:space:]]+-rf[[:space:]]+["'\'']?\$\{?pkgbase\}?-\$\{?pkgver\}?' PKGFILE; then
-    die "PKGFILE inválido: não use 'rm -rf' no diretório de source (incompatível com pkgmake)"
-  fi
+	# Detecta PKGFILE que apaga o source (incompatível com pkgmake)
+	if grep -Eq 'rm[[:space:]]+-rf[[:space:]]+(\$|\$\{)(_pkgsrc|srcdir|pkgbase)|rm[[:space:]]+-rf[[:space:]]+["'\'']?\$\{?pkgbase\}?-\$\{?pkgver\}?' PKGFILE; then
+		die "PKGFILE inválido: não use 'rm -rf' no diretório de source (incompatível com pkgmake)"
+	fi
 }
 
 sync_deps() {
-  [[ "$SYNCDEPS" -eq 1 ]] || return 0
-  local pkgs=()
-  [[ -n "${makedepends[*]}" ]] && pkgs+=("${makedepends[@]}")
-  [[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
-  [[ "${#pkgs[@]}" -eq 0 ]] && return 0
-  sudo xbps-install -Sy "${pkgs[@]}"
+	[[ "$SYNCDEPS" -eq 1 ]] || return 0
+	local pkgs=()
+	[[ -n "${makedepends[*]}" ]] && pkgs+=("${makedepends[@]}")
+	[[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
+	[[ "${#pkgs[@]}" -eq 0 ]] && return 0
+	sudo xbps-install -Sy "${pkgs[@]}"
 }
 
 fetch() {
-  msg "Fetch source"
-  mkdir -p "$SRCDIR"
-  cd "$SRCDIR"
+	msg "Fetch source"
+	mkdir -p "$SRCDIR"
+	cd "$SRCDIR"
 
-  for s in "${source[@]}"; do
-    s="${s#*::}"
+	for s in "${source[@]}"; do
+		s="${s#*::}"
 
-    case "$s" in
-      http://*|https://*)
-        f="${s##*/}"
-         if [[ -f "$f" ]]; then
-           msg "Source já existe, usando cache: $f"
-         else
-           if ! curl -fL --output "./$f" -- "$s"; then
-             case "$f" in
-               *.asc|*.sig)
-                 warn "assinatura não encontrada ($f), ignorando"
-               ;;
-               *)
-                 die "falha ao baixar source obrigatório: $f"
-               ;;
-             esac
-           fi
-         fi
-        ;;
-      *)
-        [[ -f "$WORKDIR/$s" ]] || die "arquivo local não encontrado: $s"
-        cp -f "$WORKDIR/$s" .
-        ;;
-    esac
-  done
+		case "$s" in
+		git+*)
+			repo="${s#git+}"
+			name="$(basename "$repo" .git)"
+
+			if [[ -d "$name/.git" ]]; then
+				msg "Usando repositório git existente: $name"
+			else
+				cmd_run git clone "$repo" "$name" || die "falha ao clonar $repo"
+			fi
+			;;
+		http://* | https://*)
+			f="${s##*/}"
+			if [[ -f "$f" ]]; then
+				msg "Source já existe, usando cache: $f"
+			else
+				if ! cmd_run curl -fL --output "./$f" -- "$s"; then
+					case "$f" in
+					*.asc | *.sig)
+						warn "assinatura não encontrada ($f), ignorando"
+						;;
+					*)
+						die "falha ao baixar source obrigatório: $f"
+						;;
+					esac
+				fi
+			fi
+			;;
+		*)
+			[[ -f "$WORKDIR/$s" ]] || die "arquivo local não encontrado: $s"
+			cp -f "$WORKDIR/$s" .
+			;;
+		esac
+	done
 }
 
 extract() {
-  msg "Extract source"
-  cd "$SRCDIR"
+	msg "Extract source"
+	cd "$SRCDIR"
 
-  local extracted=0
-  shopt -s nullglob
+	local extracted=0
+	shopt -s nullglob
 
-  for f in *.tar *.tar.gz *.tgz *.tar.xz *.tar.bz2 *.tar.zst; do
-    case "$f" in
-      *.tar.gz|*.tgz)
-        tar -xzf "$f" && extracted=1 || die "falha ao extrair $f"
-        ;;
-      *.tar.xz)
-        tar -xJf "$f" && extracted=1 || die "falha ao extrair $f"
-        ;;
-      *.tar.bz2)
-        tar -xjf "$f" && extracted=1 || die "falha ao extrair $f"
-        ;;
-      *.tar.zst)
-        tar --zstd -xf "$f" && extracted=1 || die "falha ao extrair $f"
-        ;;
-      *.tar)
-        tar -xf "$f" && extracted=1 || die "falha ao extrair $f"
-        ;;
-    esac
-  done
-   shopt -u nullglob
-  (( extracted )) || die "nenhum tarball foi extraído"
+	for f in *.tar *.tar.gz *.tgz *.tar.xz *.tar.bz2 *.tar.zst; do
+		case "$f" in
+		*.tar.gz | *.tgz)
+			cmd_run tar -xzf "$f" && extracted=1 || die "falha ao extrair $f"
+			;;
+		*.tar.xz)
+			cmd_run tar -xJf "$f" && extracted=1 || die "falha ao extrair $f"
+			;;
+		*.tar.bz2)
+			cmd_run tar -xjf "$f" && extracted=1 || die "falha ao extrair $f"
+			;;
+		*.tar.zst)
+			cmd_run tar --zstd -xf "$f" && extracted=1 || die "falha ao extrair $f"
+			;;
+		*.tar)
+			cmd_run tar -xf "$f" && extracted=1 || die "falha ao extrair $f"
+			;;
+		esac
+	done
+
+	shopt -u nullglob
+
+	if [[ "$HAS_GIT_SOURCE" -eq 1 ]]; then
+		msg "Fonte VCS detectada, pulando extração de tarball"
+		return 0
+	fi
+
+	((extracted)) || die "nenhum tarball foi extraído"
 }
 
 detect_src() {
-  local d
+	local d
 
-  d="$(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-  [[ -n "$d" ]] || die "diretório source não encontrado após extração"
-  export srcdir="$SRCDIR"
-  export _pkgsrc="$d"
-  export pkgdir="$PKGDIR"
+	d="$(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+	[[ -n "$d" ]] || die "diretório source não encontrado após extração"
+	export srcdir="$SRCDIR"
+	export _pkgsrc="$d"
+	export pkgdir="$PKGDIR"
 }
 
 find_privkey() {
-  [[ -n "$PRIVKEY" ]] && return 0
-  for k in "$HOME/.gnupg/privkey.pem" "$HOME/.gnupg/private.pem"; do
-    [[ -f "$k" ]] && { PRIVKEY="$k"; return 0; }
-  done
-  die "chave privada não encontrada"
+	[[ -n "$PRIVKEY" ]] && return 0
+	for k in "$HOME/.gnupg/privkey.pem" "$HOME/.gnupg/private.pem"; do
+		[[ -f "$k" ]] && {
+			PRIVKEY="$k"
+			return 0
+		}
+	done
+	die "chave privada não encontrada"
 }
 
 run_all() {
-  msg "Lint"
-  lint
+   if [[ "$GEN_KEY" -eq 1 ]]; then
+     gen_key
+     exit 0
+   fi
 
-  sync_deps
+	if (( SIGN_ONLY )); then
+		sign_only
+		create_repodata
+		exit 0
+	fi
 
-  fetch
-  extract
-  detect_src
+	msg "Lint"
+	lint
 
-  # makepkg-like: cwd é srcdir
-  cd "$srcdir"
+	sync_deps
 
-  if declare -f prepare >/dev/null; then
-    msg "Prepare"
-    prepare
-  fi
+	fetch
+	extract
+	detect_src
 
-  if declare -f build >/dev/null; then
-    msg "Build"
-    build
-  fi
+	# makepkg-like: cwd é srcdir
+	cd "$srcdir"
 
-  msg "Package"
-  mkdir -p "$pkgdir"
-  package
+	if declare -f prepare >/dev/null; then
+		msg "Prepare"
+		prepare
+	fi
 
-  msg "Create XBPS"
-  xbps-create \
-    -A "$ARCH" \
-    -n "${pkgname}-${pkgver}_${pkgrel}" \
-    -s "$pkgdesc" \
-    -l "$license" \
-    "$pkgdir"
+	if declare -f build >/dev/null; then
+		msg "Build"
+		build
+	fi
 
-  PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
-  mkdir -p "$REPODIR"
-  mv -f "$PKGOUT" "$REPODIR/"
+	msg "Package"
+	mkdir -p "$pkgdir"
+	package
 
-  if [[ "$SIGNPKG" -eq 1 ]]; then
-    find_privkey
-    msg "Sign package"
-    xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$REPODIR/$PKGOUT"
-  fi
+	msg "Create XBPS"
+	cmd_run xbps-create \
+		-A "$ARCH" \
+		-n "${pkgname}-${pkgver}_${pkgrel}" \
+		-s "$pkgdesc" \
+		-l "$license" \
+		"$pkgdir"
 
-  msg "Recreate repodata"
-  rm -f "$REPODIR"/*-repodata "$REPODIR"/*.sig2
-  xbps-rindex -r "$REPODIR"
-  xbps-rindex -a "$REPODIR"/*.xbps
+	PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
+	mkdir -p "$REPODIR"
+	mv -f "$PKGOUT" "$REPODIR/"
 
-  if [[ "$INSTALLPKG" -eq 1 ]]; then
-    if [[ "$FORCEPKG" -eq 1 ]]; then
-      sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
-    else
-      sudo xbps-install -R "$REPODIR" -S "$pkgname"
-    fi
-  fi
+	if (( $SIGNPKG )); then
+		sign_only
+	fi
+	create_repodata
+
+	if [[ "$INSTALLPKG" -eq 1 ]]; then
+		if [[ "$FORCEPKG" -eq 1 ]]; then
+			sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
+		else
+			sudo xbps-install -R "$REPODIR" -S "$pkgname"
+		fi
+	fi
 }
 
 clean() {
-  rm -rf "$SRCDIR" "$PKGDIR" "$REPODIR"
+	rm -rf "$SRCDIR" "$PKGDIR" "$REPODIR"
 }
 
 usage() {
-  cat <<EOF
-uso: pkgmake [opções]
--s, --syncdeps
--i, --install
--f, --force
---sign
---privkey KEY
--c
-EOF
+ printf "%b\n" \
+"${bold_blue}pkgmake${reset} — utilitário de build para pacotes XBPS
+
+${bold}Uso:${reset}
+  pkgmake [opções]
+
+${bold}Opções:${reset}
+  ${green}-s${reset}, ${green}--syncdeps${reset}               Instalar depends e makedepends
+  ${green}-i${reset}, ${green}--install${reset}                Instalar pacote após o build
+  ${green}-f${reset}, ${green}--force${reset}                  Forçar reinstalação do pacote
+  ${green}-q${reset}, ${green}--quiet${reset}                  Silenciar saída dos comandos
+      ${green}--sign${reset}                   Assinar pacote após o build
+      ${green}--sign-only${reset}              Somente assinar pacotes existentes no repo
+      ${green}--privkey${reset} ${yellow}<privkey.pem>${reset}  Chave privada RSA/ED25519
+      ${green}--gen-key${reset}                Gerar chave RSA 4096 em formato PEM
+  ${green}-c|--clean${reset}                   Limpar diretórios de trabalho
+  ${green}-h${reset}, ${green}--help${reset}                   Mostrar este ajuda
+
+${bold}Exemplos:${reset}
+  pkgmake
+  pkgmake -s -i
+  pkgmake --sign
+  pkgmake --sign-only --privkey minha-chave.pem
+  pkgmake -q
+
+"
+}
+
+create_repodata() {
+	msg "Recreate repodata : $REPODIR/x86_64-repodata"
+	cmd_run xbps-rindex -r "$REPODIR"
+	cmd_run xbps-rindex -a "$REPODIR"/*.xbps
+}
+
+sign_only() {
+	find_privkey
+
+	shopt -s nullglob
+	local pkgs=("$REPODIR"/*.xbps)
+	shopt -u nullglob
+
+	[[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote .xbps encontrado em $REPODIR"
+
+	for pkg in "${pkgs[@]}"; do
+		msg "Sign package: $(basename "$pkg")"
+		rm -f "$pkg.sig2"
+		cmd_run xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$pkg"
+	done
 }
 
 while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -s|--syncdeps) SYNCDEPS=1; shift ;;
-    -i|--install) INSTALLPKG=1; shift ;;
-    -f|--force) FORCEPKG=1; shift ;;
-    --sign) SIGNPKG=1; shift ;;
-    --privkey) PRIVKEY="$2"; shift 2 ;;
-    -c) clean; exit 0 ;;
-    -h|--help) usage; exit 0 ;;
-    *) die "opção inválida: $1" ;;
-  esac
+	case "$1" in
+	-s | --syncdeps)
+		SYNCDEPS=1
+		shift
+		;;
+	-i | --install)
+		INSTALLPKG=1
+		shift
+		;;
+	-f | --force)
+		FORCEPKG=1
+		shift
+		;;
+	-q | --quiet)
+		QUIET=1
+		shift
+		;;
+   --gen-key)
+     GEN_KEY=1
+     shift
+   ;;
+   --sign)
+		SIGNPKG=1
+		shift
+		;;
+	--sign-only)
+		SIGN_ONLY=1
+		shift
+		;;
+	--privkey)
+		PRIVKEY="$2"
+		shift 2
+		;;
+	-c|--clean)
+		clean
+		exit 0
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*) die "opção inválida: $1" ;;
+	esac
 done
 
 load_pkgfile
 run_all
-
