@@ -1,10 +1,41 @@
 #!/usr/bin/env bash
 # pkgmake — makepkg-like tool for XBPS
-# CONTRATO:
-# - pkgmake prepara ambiente e empacota
-# - package() é OBRIGATÓRIA
-# - build() e prepare() são OPCIONAIS
-# - pkgmake NÃO assume método de instalação
+# FLUXO CORRETO:
+# 1) fetch   -> baixa/copias TODOS source[]
+# 2) extract -> extrai SOMENTE tarballs
+# 3) build   -> só roda se extraiu
+# SEM apagar source em momento nenhum
+
+# ============================================================================
+# pkgmake — regras de build (IMPORTANTE)
+#
+# Este utilitário NÃO replica os comportamentos implícitos do makepkg.
+# Em especial:
+#
+# 1) Os arquivos listados em source=() são baixados UMA VEZ.
+#    - Se o arquivo já existir em src/, ele NÃO será baixado novamente.
+#
+# 2) Tarballs são extraídos UMA VEZ, antes do build.
+#    - O diretório extraído NÃO será reextraído automaticamente.
+#
+# 3) PKGFILEs NÃO DEVEM apagar o diretório de source.
+#    - NÃO use: rm -rf ${pkgbase}-${pkgver}
+#    - NÃO use: rm -rf $_pkgsrc
+#    - NÃO use: rm -rf "$srcdir/..."
+#
+#    PKGFILEs que dependem de reextração automática (como no makepkg)
+#    são considerados INVÁLIDOS para o pkgmake.
+#
+# 4) O build SEMPRE ocorre dentro de src/<pkgname>.
+#
+# Resumo:
+#   - Baixar ≠ extrair
+#   - Extrair ≠ build
+#   - pkgmake exige PKGFILEs corretos e previsíveis.
+#
+# ============================================================================
+
+
 
 set -e
 
@@ -20,8 +51,9 @@ INSTALLPKG=0
 FORCEPKG=0
 PRIVKEY=""
 
-die() { echo "erro: $*" >&2; exit 1; }
-msg() { echo "==> $*"; }
+die()  { echo "erro: $*" >&2; exit 1; }
+msg()  { echo "==> $*"; }
+warn() { echo "==> aviso: $*" >&2; }
 
 load_pkgfile() {
   [[ -f PKGFILE ]] || die "PKGFILE não encontrado"
@@ -33,65 +65,101 @@ load_pkgfile() {
   : "${pkgdesc:?}"
   : "${license:?}"
 
-  if declare -p source &>/dev/null; then
-    if [[ "$(declare -p source)" == "declare -a"* ]]; then
-      SRC="${source[0]}"
-    else
-      SRC="$source"
-    fi
-  else
-    die "source não definido"
-  fi
+  pkgbase="${pkgbase:-$pkgname}"
 
-  SRC="${SRC#*::}"
-  [[ -n "$SRC" ]] || die "source vazio"
-}
-
-sync_deps() {
-  [[ "$SYNCDEPS" -eq 1 ]] || return 0
-
-  pkgs=()
-  [[ -n "${makedepends[*]}" ]] && pkgs+=("${makedepends[@]}")
-  [[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
-
-  [[ "${#pkgs[@]}" -eq 0 ]] && return 0
-  sudo xbps-install -Sy "${pkgs[@]}"
+  declare -p source &>/dev/null || die "source não definido"
 }
 
 lint() {
   declare -f package >/dev/null || die "função package() ausente"
+
+  # Detecta PKGFILE que apaga o source (incompatível com pkgmake)
+  if grep -Eq 'rm[[:space:]]+-rf[[:space:]]+(\$|\$\{)(_pkgsrc|srcdir|pkgbase)|rm[[:space:]]+-rf[[:space:]]+["'\'']?\$\{?pkgbase\}?-\$\{?pkgver\}?' PKGFILE; then
+    die "PKGFILE inválido: não use 'rm -rf' no diretório de source (incompatível com pkgmake)"
+  fi
+}
+
+sync_deps() {
+  [[ "$SYNCDEPS" -eq 1 ]] || return 0
+  local pkgs=()
+  [[ -n "${makedepends[*]}" ]] && pkgs+=("${makedepends[@]}")
+  [[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
+  [[ "${#pkgs[@]}" -eq 0 ]] && return 0
+  sudo xbps-install -Sy "${pkgs[@]}"
 }
 
 fetch() {
+  msg "Fetch source"
   mkdir -p "$SRCDIR"
   cd "$SRCDIR"
 
-  case "$SRC" in
-    git+*)
-      src="${SRC#git+}"
-      repo="${src%%#*}"
-      ref="${src#"$repo"}"
-      ref="${ref#\#}"
+  for s in "${source[@]}"; do
+    s="${s#*::}"
 
-      msg "Clone git repository"
-      rm -rf "$pkgname"
-      git clone "$repo" "$pkgname"
-      cd "$pkgname"
+    case "$s" in
+      http://*|https://*)
+        f="${s##*/}"
+         if [[ -f "$f" ]]; then
+           msg "Source já existe, usando cache: $f"
+         else
+           if ! curl -fL --output "./$f" -- "$s"; then
+             case "$f" in
+               *.asc|*.sig)
+                 warn "assinatura não encontrada ($f), ignorando"
+               ;;
+               *)
+                 die "falha ao baixar source obrigatório: $f"
+               ;;
+             esac
+           fi
+         fi
+        ;;
+      *)
+        [[ -f "$WORKDIR/$s" ]] || die "arquivo local não encontrado: $s"
+        cp -f "$WORKDIR/$s" .
+        ;;
+    esac
+  done
+}
 
-      case "$ref" in
-        tag=*)    git checkout "${ref#tag=}" ;;
-        commit=*) git checkout "${ref#commit=}" ;;
-        branch=*) git checkout "${ref#branch=}" ;;
-        "" )      : ;;
-        * ) die "ref git inválida: $ref" ;;
-      esac
-      ;;
-    *)
-      file="${SRC##*/}"
-      [[ -f "$file" ]] || curl -L -o "$file" "$SRC"
-      tar xf "$file"
-      ;;
-  esac
+extract() {
+  msg "Extract source"
+  cd "$SRCDIR"
+
+  local extracted=0
+  shopt -s nullglob
+
+  for f in *.tar *.tar.gz *.tgz *.tar.xz *.tar.bz2 *.tar.zst; do
+    case "$f" in
+      *.tar.gz|*.tgz)
+        tar -xzf "$f" && extracted=1 || die "falha ao extrair $f"
+        ;;
+      *.tar.xz)
+        tar -xJf "$f" && extracted=1 || die "falha ao extrair $f"
+        ;;
+      *.tar.bz2)
+        tar -xjf "$f" && extracted=1 || die "falha ao extrair $f"
+        ;;
+      *.tar.zst)
+        tar --zstd -xf "$f" && extracted=1 || die "falha ao extrair $f"
+        ;;
+      *.tar)
+        tar -xf "$f" && extracted=1 || die "falha ao extrair $f"
+        ;;
+    esac
+  done
+   shopt -u nullglob
+  (( extracted )) || die "nenhum tarball foi extraído"
+}
+
+detect_src() {
+  local d
+
+  d="$(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+  [[ -n "$d" ]] || die "diretório source não encontrado após extração"
+  export srcdir="$SRCDIR"
+  export _pkgsrc="$d"
+  export pkgdir="$PKGDIR"
 }
 
 find_privkey() {
@@ -103,21 +171,17 @@ find_privkey() {
 }
 
 run_all() {
-  [[ "$EUID" -eq 0 ]] && die "pkgmake não deve ser executado como root"
-
   msg "Lint"
   lint
 
   sync_deps
 
-  msg "Fetch source"
   fetch
+  extract
+  detect_src
 
-  cd "$WORKDIR"
-  export srcdir="$SRCDIR"
-  export pkgdir="$PKGDIR"
-
-  [[ -n "$pkgdir" && "$pkgdir" != "/" ]] || die "pkgdir inválido"
+  # makepkg-like: cwd é srcdir
+  cd "$srcdir"
 
   if declare -f prepare >/dev/null; then
     msg "Prepare"
@@ -129,8 +193,8 @@ run_all() {
     build
   fi
 
-  msg "Package (staging)"
-  mkdir -p "$PKGDIR"
+  msg "Package"
+  mkdir -p "$pkgdir"
   package
 
   msg "Create XBPS"
@@ -139,17 +203,16 @@ run_all() {
     -n "${pkgname}-${pkgver}_${pkgrel}" \
     -s "$pkgdesc" \
     -l "$license" \
-    "$PKGDIR"
+    "$pkgdir"
 
-  PKGFILE_OUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
-
+  PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
   mkdir -p "$REPODIR"
-  mv -f "$PKGFILE_OUT" "$REPODIR/"
+  mv -f "$PKGOUT" "$REPODIR/"
 
   if [[ "$SIGNPKG" -eq 1 ]]; then
     find_privkey
     msg "Sign package"
-    xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$REPODIR/$PKGFILE_OUT"
+    xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$REPODIR/$PKGOUT"
   fi
 
   msg "Recreate repodata"
@@ -173,13 +236,12 @@ clean() {
 usage() {
   cat <<EOF
 uso: pkgmake [opções]
-
--s, --syncdeps     instalar depends e makedepends
--i, --install      instalar pacote após build
--f, --force        forçar reinstalação
---sign             assinar pacote (.sig2)
---privkey KEY      chave RSA PEM
--c                 limpar diretórios
+-s, --syncdeps
+-i, --install
+-f, --force
+--sign
+--privkey KEY
+-c
 EOF
 }
 
@@ -198,3 +260,4 @@ done
 
 load_pkgfile
 run_all
+
