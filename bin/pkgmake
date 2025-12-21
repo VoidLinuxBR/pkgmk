@@ -226,13 +226,17 @@ extract() {
 }
 
 detect_src() {
-	local d
+  local d
 
-	d="$(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-	[[ -n "$d" ]] || die "diretório source não encontrado após extração"
-	export srcdir="$SRCDIR"
-	export _pkgsrc="$d"
-	export pkgdir="$PKGDIR"
+  d="$(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+  [[ -n "$d" ]] || die "diretório source não encontrado após extração"
+
+  export srcdir="$SRCDIR"
+  export _pkgsrc="$d"
+
+  # compatibilidade total: Arch (pkgdir) == Void (DESTDIR)
+  export pkgdir="$PKGDIR"
+  export DESTDIR="$PKGDIR"
 }
 
 find_privkey() {
@@ -247,67 +251,72 @@ find_privkey() {
 }
 
 run_all() {
-   if [[ "$GEN_KEY" -eq 1 ]]; then
-     gen_key
-     exit 0
-   fi
+  if [[ "$GEN_KEY" -eq 1 ]]; then
+    gen_key
+    exit 0
+  fi
 
-	if (( SIGN_ONLY )); then
-		sign_only
-		create_repodata
-		exit 0
-	fi
+  if (( SIGN_ONLY )); then
+    sign_only
+    create_repodata
+    exit 0
+  fi
 
-	msg "Lint"
-	lint
+  msg "Lint"
+  lint
 
-	sync_deps
+  sync_deps
 
-	fetch
-	extract
-	detect_src
+  fetch
+  extract
+  detect_src
 
-	# makepkg-like: cwd é srcdir
-	cd "$srcdir"
+  # estilo makepkg/xbps-src: cwd em srcdir
+  cd "$srcdir" || die "falha ao entrar em srcdir"
 
-	if declare -f prepare >/dev/null; then
-		msg "Prepare"
-		prepare
-	fi
+  if declare -f prepare >/dev/null; then
+    msg "Prepare"
+    prepare
+  fi
 
-	if declare -f build >/dev/null; then
-		msg "Build"
-		build
-	fi
+  if declare -f build >/dev/null; then
+    msg "Build"
+    build
+  fi
 
-	msg "Package"
-	mkdir -p "$pkgdir"
-	package
+  msg "Package"
 
-	msg "Create XBPS"
-	cmd_run xbps-create \
-		-A "$ARCH" \
-		-n "${pkgname}-${pkgver}_${pkgrel}" \
-		-s "$pkgdesc" \
-		-l "$license" \
-		"$pkgdir"
+  # staging único e seguro (Arch + Void)
+  mkdir -p "$DESTDIR"
+  [[ -n "$DESTDIR" && "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
 
-	PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
-	mkdir -p "$REPODIR"
-	mv -f "$PKGOUT" "$REPODIR/"
+  package
 
-	if (( $SIGNPKG )); then
-		sign_only
-	fi
-	create_repodata
+  msg "Create XBPS"
+  cmd_run xbps-create \
+    -A "$ARCH" \
+    -n "${pkgname}-${pkgver}_${pkgrel}" \
+    -s "$pkgdesc" \
+    -l "$license" \
+    "$pkgdir"
 
-	if [[ "$INSTALLPKG" -eq 1 ]]; then
-		if [[ "$FORCEPKG" -eq 1 ]]; then
-			sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
-		else
-			sudo xbps-install -R "$REPODIR" -S "$pkgname"
-		fi
-	fi
+  PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
+  mkdir -p "$REPODIR"
+  mv -f "$PKGOUT" "$REPODIR/"
+
+  if (( SIGNPKG )); then
+    sign_only
+  fi
+
+  create_repodata
+
+  if [[ "$INSTALLPKG" -eq 1 ]]; then
+    if [[ "$FORCEPKG" -eq 1 ]]; then
+      sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
+    else
+      sudo xbps-install -R "$REPODIR" -S "$pkgname"
+    fi
+  fi
 }
 
 clean() {
@@ -365,6 +374,23 @@ sign_only() {
 	done
 }
 
+resolve_fns() {
+  # prepare
+  if ! declare -f prepare >/dev/null && declare -f do_prepare >/dev/null; then
+    prepare() { do_prepare "$@"; }
+  fi
+
+  # build
+  if ! declare -f build >/dev/null && declare -f do_build >/dev/null; then
+    build() { do_build "$@"; }
+  fi
+
+  # package / install
+  if ! declare -f package >/dev/null && declare -f do_install >/dev/null; then
+    package() { do_install "$@"; }
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	-s | --syncdeps)
@@ -412,4 +438,5 @@ while [[ $# -gt 0 ]]; do
 done
 
 load_pkgfile
+resolve_fns
 run_all
