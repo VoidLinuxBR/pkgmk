@@ -419,19 +419,19 @@ create_repodata() {
   rm -f "$REPODIR"/*-repodata
 
   # recria índice vazio
-  xbps-rindex -r "$REPODIR"
+  cmd_run xbps-rindex -r "$REPODIR"
 
   # adiciona pacotes UM A UM (igual xbps-src)
   local p
   for p in "$REPODIR"/*.xbps; do
     [[ -f "$p" ]] || continue
-    xbps-rindex -a "$p"
+    cmd_run xbps-rindex -a "$p"
   done
 
   # assina o índice (se habilitado)
   if [[ "$SIGNPKG" -eq 1 ]]; then
     find_privkey
-    xbps-rindex --sign --privkey "$PRIVKEY" "$REPODIR"
+    cmd_run xbps-rindex --sign --signedby 'Vilmar Catafesta <vcatafesta@gmail.com>' --privkey "$PRIVKEY" "$REPODIR"
   fi
 }
 
