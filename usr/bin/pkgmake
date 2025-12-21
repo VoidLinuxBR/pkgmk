@@ -298,7 +298,8 @@ run_all() {
    done
 
    for d in "${depends[@]}"; do
-     xbps-query -Rs "^${d}(-|$)" >/dev/null \
+     pkg="${d%%[<>=]*}"
+     xbps-query -Rs "^${pkg}(-|$)" >/dev/null \
        || die "dependência inválida ou inexistente: $d"
    done
 
