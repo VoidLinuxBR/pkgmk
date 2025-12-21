@@ -111,6 +111,21 @@ gen_key() {
 	msg "  $KEY_FILE"
 }
 
+normalize_dep_patterns() {
+  local var i dep
+  for var in depends makedepends; do
+    declare -p "$var" &>/dev/null || continue
+    declare -n arr="$var"
+    for i in "${!arr[@]}"; do
+      dep="${arr[$i]}"
+      # se NÃO contém operador de versão (<, > ou =), adiciona >=0
+      if ! [[ "$dep" =~ [\<\>\=] ]]; then
+        arr[$i]="${dep}>=0"
+      fi
+    done
+  done
+}
+
 normalize_deps() {
 	# depends
 	if declare -p depends &>/dev/null; then
@@ -391,10 +406,33 @@ ${bold}Exemplos:${reset}
 "
 }
 
-create_repodata() {
+create_repodataOLD() {
 	msg "Recreate repodata : $REPODIR/x86_64-repodata"
 	cmd_run xbps-rindex -r "$REPODIR"
 	cmd_run xbps-rindex -a "$REPODIR"/*.xbps
+}
+
+create_repodata() {
+  msg "Recreate repodata (hard reset)"
+
+  # remove TODO estado antigo
+  rm -f "$REPODIR"/*-repodata
+
+  # recria índice vazio
+  xbps-rindex -r "$REPODIR"
+
+  # adiciona pacotes UM A UM (igual xbps-src)
+  local p
+  for p in "$REPODIR"/*.xbps; do
+    [[ -f "$p" ]] || continue
+    xbps-rindex -a "$p"
+  done
+
+  # assina o índice (se habilitado)
+  if [[ "$SIGNPKG" -eq 1 ]]; then
+    find_privkey
+    xbps-rindex --sign --privkey "$PRIVKEY" "$REPODIR"
+  fi
 }
 
 sign_only() {
@@ -478,5 +516,6 @@ done
 
 load_pkgfile
 normalize_deps
+normalize_dep_patterns
 resolve_fns
 run_all
