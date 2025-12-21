@@ -1,46 +1,55 @@
 #!/usr/bin/env bash
-# pkgmake — makepkg-like tool for XBPS
-# FLUXO CORRETO:
-# 1) fetch   -> baixa/copias TODOS source[]
-# 2) extract -> extrai SOMENTE tarballs
-# 3) build   -> só roda se extraiu
-# SEM apagar source em momento nenhum
+# -*- coding: utf-8 -*-
+# shellcheck shell=bash disable=SC1091,SC2039,SC2166,SC2034
+#
+#  pkgmake — makepkg-like tool for XBPS
+#  Created: dom 21 dez 2025 11:47:51 -04
+#  Altered: dom 21 dez 2025 11:47:51 -04
+#  Updated: dom 21 dez 2025 11:47:51 -04
+#
+#  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
+#  Assembled By Vilmar Catafesta for the ChiliLinux project.
+#  All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions
+#  are met:
+#  1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#  2. Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in the
+#     documentation and/or other materials provided with the distribution.
+#
+#  THIS SOFTWARE IS PROVIDED BY Vilmar Catafesta ''AS IS'' AND ANY EXPRESS OR
+#  IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+#  OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+#  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+#  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+#  NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+#  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+#  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+#  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+#  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+##############################################################################
+#export LANGUAGE=pt_BR
+export TEXTDOMAINDIR=/usr/share/locale
+export TEXTDOMAIN=pkgmake
 
-# ============================================================================
-# pkgmake — regras de build (IMPORTANTE)
-#
-# Este utilitário NÃO replica os comportamentos implícitos do makepkg.
-# Em especial:
-#
-# 1) Os arquivos listados em source=() são baixados UMA VEZ.
-#    - Se o arquivo já existir em src/, ele NÃO será baixado novamente.
-#
-# 2) Tarballs são extraídos UMA VEZ, antes do build.
-#    - O diretório extraído NÃO será reextraído automaticamente.
-#
-# 3) PKGFILEs NÃO DEVEM apagar o diretório de source.
-#    - NÃO use: rm -rf ${pkgbase}-${pkgver}
-#    - NÃO use: rm -rf $_pkgsrc
-#    - NÃO use: rm -rf "$srcdir/..."
-#
-#    PKGFILEs que dependem de reextração automática (como no makepkg)
-#    são considerados INVÁLIDOS para o pkgmake.
-#
-# 4) O build SEMPRE ocorre dentro de src/<pkgname>.
-#
-# Resumo:
-#   - Baixar ≠ extrair
-#   - Extrair ≠ build
-#   - pkgmake exige PKGFILEs corretos e previsíveis.
-#
-# ============================================================================
-
+#debug
+export PS4='${red}${0##*/}${green}[$FUNCNAME]${pink}[$LINENO]${reset}'
+#set -x
 set -e
+
+#system
+declare APP="${0##*/}"
+declare _VERSION_="0.12.21-20251221"
+declare APPDESC="$APP - Wraper for xbps-create"
+declare distro="$(uname -n)"
+declare DEPENDENCIES=(tput)
 
 WORKDIR="$PWD"
 SRCDIR="$WORKDIR/src"
 PKGDIR="$WORKDIR/pkg"
-REPODIR="$WORKDIR/repo"
 ARCH="$(uname -m)"
 
 SYNCDEPS=0
@@ -48,8 +57,10 @@ INSTALLPKG=0
 FORCEPKG=0
 PRIVKEY=""
 SIGNPKG=0
+CLI_SIGNPKG=""
 SIGN_ONLY=0
-QUIET=0
+VERBOSE=0
+CLI_VERBOSE=""
 GEN_KEY=0
 KEY_FILE="privkey.pem"
 PRINTCONFIG=0
@@ -88,11 +99,45 @@ bg_magenta='\033[45m'
 bg_cyan='\033[46m'
 bg_white='\033[47m'
 
-# Load global config
-[[ -f /etc/pkgmake.conf ]] && source /etc/pkgmake.conf
+parse_config() {
+	# Load global config
+	[[ -f /etc/pkgmake.conf ]] && source /etc/pkgmake.conf
+}
+
+validate_config() {
+	# SIGNPKG
+	[[ "$SIGNPKG" =~ ^[01]$ ]] || die "SIGNPKG inválido (use 0 ou 1)"
+
+	# VERBOSE
+	[[ "$VERBOSE" =~ ^[01]$ ]] || die "VERBOSE inválido (use 0 ou 1)"
+
+	# PACKAGER (se definido)
+	if [[ -n "$PACKAGER" ]]; then
+		[[ "$PACKAGER" == *"<"*">"* ]] ||
+			die "PACKAGER inválido (esperado: Nome <email>)"
+	fi
+
+	# Assinatura
+	if [[ "$SIGNPKG" -eq 1 ]]; then
+		if [[ -n "$PRIVKEY" ]]; then
+			[[ -f "$PRIVKEY" ]] ||
+				die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
+		else
+			find_privkey || die "SIGNPKG=1, mas nenhuma chave privada encontrada"
+		fi
+	fi
+}
+
+validate_pkgdest_sanity() {
+	case "$PKGDEST" in
+	*::* | *"//"*)
+		die "PKGDEST inválido: $PKGDEST"
+		;;
+	esac
+}
 
 cmd_run() {
-	if [[ "$QUIET" -eq 1 ]]; then
+	if [[ "$VERBOSE" -eq 0 ]]; then
 		"$@" >/dev/null 2>&1
 	else
 		"$@"
@@ -107,7 +152,7 @@ msg() { echo -e "${cyan}==> $*${reset}"; }
 warn() { echo -e "${yellow}==> aviso: $*${reset}" >&2; }
 
 print_config() {
-  cat <<EOF
+	cat <<EOF
 # pkgmake effective configuration
 
 PKGDEST=${PKGDEST:-"(default: ./repo)"}
@@ -136,18 +181,18 @@ gen_key() {
 }
 
 normalize_dep_patterns() {
-  local var i dep
-  for var in depends makedepends; do
-    declare -p "$var" &>/dev/null || continue
-    declare -n arr="$var"
-    for i in "${!arr[@]}"; do
-      dep="${arr[$i]}"
-      # se NÃO contém operador de versão (<, > ou =), adiciona >=0
-      if ! [[ "$dep" =~ [\<\>\=] ]]; then
-        arr[$i]="${dep}>=0"
-      fi
-    done
-  done
+	local var i dep
+	for var in depends makedepends; do
+		declare -p "$var" &>/dev/null || continue
+		declare -n arr="$var"
+		for i in "${!arr[@]}"; do
+			dep="${arr[$i]}"
+			# se NÃO contém operador de versão (<, > ou =), adiciona >=0
+			if ! [[ "$dep" =~ [\<\>\=] ]]; then
+				arr[$i]="${dep}>=0"
+			fi
+		done
+	done
 }
 
 normalize_deps() {
@@ -315,8 +360,6 @@ find_privkey() {
 }
 
 run_all() {
-   resolve_pkgdest
-
 	if [[ "$GEN_KEY" -eq 1 ]]; then
 		gen_key
 		exit 0
@@ -376,8 +419,7 @@ run_all() {
 		"$pkgdir"
 
 	PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
-	mkdir -p "$REPODIR"
-	mv -f "$PKGOUT" "$REPODIR/"
+	mv -f "$PKGOUT" "$PKGDEST/"
 
 	if ((SIGNPKG)); then
 		sign_only
@@ -388,19 +430,19 @@ run_all() {
 	if [ "$INSTALLPKG" -eq 1 ]; then
 		msg "Install package"
 		if [[ "$FORCEPKG" -eq 1 ]]; then
-			sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
+			sudo xbps-install -R "$PKGDEST" -S -f "$pkgname"
 		else
-			sudo xbps-install -R "$REPODIR" -S "$pkgname"
+			sudo xbps-install -R "$PKGDEST" -S "$pkgname"
 		fi
 	else
 		msg "Install with:"
-		msg "  sudo xbps-install -R $REPODIR -S ${pkgname}"
+		msg "  sudo xbps-install -R $PKGDEST -S ${pkgname}"
 	fi
 
 }
 
 clean() {
-	rm -rf "$SRCDIR" "$PKGDIR" "$REPODIR"
+	rm -rf "$SRCDIR" "$PKGDIR" "$PKGDEST"
 }
 
 usage() {
@@ -415,13 +457,14 @@ ${bold}Opções:${reset}
   ${green}-i${reset}, ${green}--install${reset}                Instalar pacote após o build
   ${green}-f${reset}, ${green}--force${reset}                  Forçar reinstalação do pacote
   ${green}-q${reset}, ${green}--quiet${reset}                  Silenciar saída dos comandos
+  ${green}-v${reset}, ${green}--verbose${reset}                Mostrar saída dos comandos
       ${green}--sign${reset}                   Assinar pacote após o build
       ${green}--sign-only${reset}              Somente assinar pacotes existentes no repo
-      ${green}--privkey${reset} ${yellow}<privkey.pem>${reset}  Chave privada RSA/ED25519
+      ${green}--privkey${reset} ${yellow}<path>${reset}         Caminho da chave privada PEM (autodetecta se omitido)
       ${green}--gen-key${reset}                Gerar chave RSA 4096 em formato PEM
   ${green}-c|--clean${reset}                   Limpar diretórios de trabalho
   ${green}-p|--print-config${reset}            Imprimir configuracao do /etc/pkgmake.conf
-  ${green}-k|--pkgdest${reset}                 Define o diretório do repositório local onde os pacotes (.xbps) e o repodata serão gerados
+  ${green}-k|--pkgdest${reset} ${yellow}<path>${reset}          Diretório local onde os pacotes (.xbps) e o repodata serão gerados
   ${green}-h${reset}, ${green}--help${reset}                   Mostrar este ajuda
 
 ${bold}Exemplos:${reset}
@@ -435,42 +478,60 @@ ${bold}Exemplos:${reset}
 }
 
 create_repodataOLD() {
-	msg "Recreate repodata : $REPODIR/x86_64-repodata"
-	cmd_run xbps-rindex -r "$REPODIR"
-	cmd_run xbps-rindex -a "$REPODIR"/*.xbps
+	msg "Recreate repodata : $PKGDEST/x86_64-repodata"
+	cmd_run xbps-rindex -r "$PKGDEST"
+	cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
 }
 
 create_repodata() {
-  msg "Recreate repodata (hard reset)"
+	msg "Recreate repodata (hard reset)"
 
-  # remove TODO estado antigo
-  rm -f "$REPODIR"/*-repodata
+	# remove TODO estado antigo
+	rm -f "$PKGDEST"/*-repodata
 
-  # recria índice vazio
-  cmd_run xbps-rindex -r "$REPODIR"
+	# recria índice vazio
+	cmd_run xbps-rindex -r "$PKGDEST"
 
-  # adiciona pacotes UM A UM (igual xbps-src)
-  local p
-  for p in "$REPODIR"/*.xbps; do
-    [[ -f "$p" ]] || continue
-    cmd_run xbps-rindex -a "$p"
-  done
+	# adiciona pacotes UM A UM (igual xbps-src)
+	local p
+	for p in "$PKGDEST"/*.xbps; do
+		[[ -f "$p" ]] || continue
+		cmd_run xbps-rindex -a "$p"
+	done
 
-  # assina o índice (se habilitado)
-  if [[ "$SIGNPKG" -eq 1 ]]; then
-    find_privkey
-    cmd_run xbps-rindex --sign --signedby 'Vilmar Catafesta <vcatafesta@gmail.com>' --privkey "$PRIVKEY" "$REPODIR"
-  fi
+	# assina o índice (se habilitado)
+	if [[ "$SIGNPKG" -eq 1 ]]; then
+		if [[ -n "$PRIVKEY" ]]; then
+			if [[ ! -f "$PRIVKEY" ]]; then
+				die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
+			fi
+		else
+			find_privkey || die "Nenhuma chave privada encontrada para assinatura"
+		fi
+
+		local signedby=()
+		[[ -n "$PACKAGER" ]] && signedby=(--signedby "$PACKAGER")
+
+		cmd_run xbps-rindex \
+			--sign \
+			"${signedby[@]}" \
+			--privkey "$PRIVKEY" \
+			"$PKGDEST"
+	fi
 }
 
 sign_only() {
-	find_privkey
+	if [[ -n "$PRIVKEY" ]]; then
+		[[ ! -f "$PRIVKEY" ]] && die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
+	else
+		find_privkey || die "Nenhuma chave privada encontrada para assinatura"
+	fi
 
 	shopt -s nullglob
-	local pkgs=("$REPODIR"/*.xbps)
+	local pkgs=("$PKGDEST"/*.xbps)
 	shopt -u nullglob
 
-	[[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote .xbps encontrado em $REPODIR"
+	[[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote .xbps encontrado em $PKGDEST"
 
 	for pkg in "${pkgs[@]}"; do
 		msg "Sign package: $(basename "$pkg")"
@@ -497,26 +558,55 @@ resolve_fns() {
 }
 
 resolve_pkgdest() {
-  local dest
+	local dest
 
-  if [[ -n "$CLI_PKGDEST" ]]; then
-    dest="$CLI_PKGDEST"
-  elif [[ -n "$PKGDEST" ]]; then
-    dest="$PKGDEST"
-  else
-    dest="$WORKDIR/repo"
-  fi
+	if [[ -n "$CLI_PKGDEST" ]]; then
+		dest="$CLI_PKGDEST"
+	elif [[ -n "$PKGDEST" ]]; then
+		dest="$PKGDEST"
+	else
+		die "PKGDEST não definido (use --pkgdest ou /etc/pkgmake.conf)"
+	fi
 
-  # absolutiza
-  dest="$(readlink -f "$dest" 2>/dev/null || true)"
+	validate_pkgdest_sanity
 
-  # cria se não existir
-  mkdir -p "$dest" || die "não consegui criar PKGDEST: $dest"
+	# absolutiza
+	dest="$(readlink -f "$dest" 2>/dev/null || true)"
+	[[ -n "$dest" ]] || die "PKGDEST inválido após resolução"
 
-  # testa escrita
-  [[ -w "$dest" ]] || die "sem permissão de escrita em PKGDEST: $dest"
+	# cria se não existir
+	mkdir -p "$dest" || die "não consegui criar PKGDEST: $dest"
 
-  REPODIR="$dest"
+	# testa escrita
+	[[ -w "$dest" ]] || die "sem permissão de escrita em PKGDEST: $dest"
+
+	PKGDEST="$dest"
+}
+
+resolve_signpkg() {
+	if [[ -n "$CLI_SIGNPKG" ]]; then
+		SIGNPKG="$CLI_SIGNPKG"
+	fi
+
+	case "$SIGNPKG" in
+	0 | 1) : ;;
+	*)
+		die "SIGNPKG inválido (use 0 ou 1): $SIGNPKG"
+		;;
+	esac
+}
+
+resolve_verbose() {
+	if [[ -n "$CLI_VERBOSE" ]]; then
+		VERBOSE="$CLI_VERBOSE"
+	fi
+
+	case "$VERBOSE" in
+	0 | 1) : ;;
+	*)
+		die "VERBOSE inválido (use 0 ou 1): $VERBOSE"
+		;;
+	esac
 }
 
 while [[ $# -gt 0 ]]; do
@@ -533,8 +623,12 @@ while [[ $# -gt 0 ]]; do
 		FORCEPKG=1
 		shift
 		;;
+	-v | --verbose)
+		CLI_VERBOSE=1
+		shift
+		;;
 	-q | --quiet)
-		QUIET=1
+		CLI_VERBOSE=0
 		shift
 		;;
 	--gen-key)
@@ -542,7 +636,7 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	--sign)
-		SIGNPKG=1
+		CLI_SIGNPKG=1
 		shift
 		;;
 	--sign-only)
@@ -561,10 +655,10 @@ while [[ $# -gt 0 ]]; do
 		print_config
 		exit 0
 		;;
-    -k|--pkgdest)
-      CLI_PKGDEST="$2"
-      shift 2
-      ;;
+	-k | --pkgdest)
+		CLI_PKGDEST="$2"
+		shift 2
+		;;
 	-h | --help)
 		usage
 		exit 0
@@ -573,8 +667,13 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+parse_config
+resolve_signpkg
+resolve_verbose
+resolve_pkgdest # blindagem de path + permissão (ANTES de tudo)
 load_pkgfile
 normalize_deps
 normalize_dep_patterns
 resolve_fns
+validate_config # validação FINAL, com tudo resolvido
 run_all
