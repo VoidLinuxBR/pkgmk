@@ -314,9 +314,9 @@ run_all() {
 
   package
 
-   xbps_deps=()
+   xbps_dep_args=()
    for d in "${depends[@]}"; do
-     xbps_deps+=("-D" "$d")
+     xbps_dep_args+=("-D$d")
 #    pkg="${d%%[<>=]*}"
 #    xbps-query -R -p pkgname "$pkg" >/dev/null || die "dependência inválida ou inexistente: $d"
    done
