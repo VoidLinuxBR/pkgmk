@@ -319,8 +319,8 @@ run_all() {
 #    xbps-query -R -p pkgname "$pkg" >/dev/null || die "dependência inválida ou inexistente: $d"
 #   done
 
-   # cria uma única string com todas as dependências
-   deps_list="$(printf '%s ' "${depends[@]}")"
+   # depends já é array aqui (graças ao normalize_deps)
+   deps_list="${depends[*]}"
 
    msg "Create XBPS"
    cmd_run xbps-create \
