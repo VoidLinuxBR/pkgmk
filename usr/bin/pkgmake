@@ -231,10 +231,8 @@ load_pkgfile() {
 	declare -p source &>/dev/null || die "source não definido"
 	HAS_GIT_SOURCE=0
 	for s in "${source[@]}"; do
-      if [[ "$s" == git+* ]]; then
-         HAS_GIT_SOURCE=1
-      fi
-	done
+      [[ "$s" == git+* ]] && HAS_GIT_SOURCE=1 || true
+   done
 }
 
 lint() {
