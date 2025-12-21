@@ -87,47 +87,50 @@ bg_cyan='\033[46m'
 bg_white='\033[47m'
 
 cmd_run() {
-  if [[ "$QUIET" -eq 1 ]]; then
-    "$@" >/dev/null 2>&1
-  else
-    "$@"
-  fi
+	if [[ "$QUIET" -eq 1 ]]; then
+		"$@" >/dev/null 2>&1
+	else
+		"$@"
+	fi
 }
 
-die() { echo -e "${red}erro: $*${reset}" >&2; exit 1; }
+die() {
+	echo -e "${red}erro: $*${reset}" >&2
+	exit 1
+}
 msg() { echo -e "${cyan}==> $*${reset}"; }
 warn() { echo -e "${yellow}==> aviso: $*${reset}" >&2; }
 
 gen_key() {
-  [[ -f "$KEY_FILE" ]] && die "chave já existe: $KEY_FILE"
+	[[ -f "$KEY_FILE" ]] && die "chave já existe: $KEY_FILE"
 
-  msg "Gerando chave RSA 4096 bits (PEM): $KEY_FILE"
-  cmd_run ssh-keygen -t rsa -b 4096 -m PEM -f "$KEY_FILE"
+	msg "Gerando chave RSA 4096 bits (PEM): $KEY_FILE"
+	cmd_run ssh-keygen -t rsa -b 4096 -m PEM -f "$KEY_FILE"
 
-  msg "Chave gerada com sucesso:"
-  msg "  $KEY_FILE"
+	msg "Chave gerada com sucesso:"
+	msg "  $KEY_FILE"
 }
 
 normalize_deps() {
-  # depends
-  if declare -p depends &>/dev/null; then
-    if [[ "$(declare -p depends)" != declare\ -a* ]]; then
-      depends="${depends//$'\n'/ }"
-      read -r -a depends <<< "$depends"
-    fi
-  else
-    depends=()
-  fi
+	# depends
+	if declare -p depends &>/dev/null; then
+		if [[ "$(declare -p depends)" != declare\ -a* ]]; then
+			depends="${depends//$'\n'/ }"
+			read -r -a depends <<<"$depends"
+		fi
+	else
+		depends=()
+	fi
 
-  # makedepends
-  if declare -p makedepends &>/dev/null; then
-    if [[ "$(declare -p makedepends)" != declare\ -a* ]]; then
-      makedepends="${makedepends//$'\n'/ }"
-      read -r -a makedepends <<< "$makedepends"
-    fi
-  else
-    makedepends=()
-  fi
+	# makedepends
+	if declare -p makedepends &>/dev/null; then
+		if [[ "$(declare -p makedepends)" != declare\ -a* ]]; then
+			makedepends="${makedepends//$'\n'/ }"
+			read -r -a makedepends <<<"$makedepends"
+		fi
+	else
+		makedepends=()
+	fi
 }
 
 load_pkgfile() {
@@ -248,17 +251,17 @@ extract() {
 }
 
 detect_src() {
-  local d
+	local d
 
-  d="$(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-  [[ -n "$d" ]] || die "diretório source não encontrado após extração"
+	d="$(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+	[[ -n "$d" ]] || die "diretório source não encontrado após extração"
 
-  export srcdir="$SRCDIR"
-  export _pkgsrc="$d"
+	export srcdir="$SRCDIR"
+	export _pkgsrc="$d"
 
-  # compatibilidade total: Arch (pkgdir) == Void (DESTDIR)
-  export pkgdir="$PKGDIR"
-  export DESTDIR="$PKGDIR"
+	# compatibilidade total: Arch (pkgdir) == Void (DESTDIR)
+	export pkgdir="$PKGDIR"
+	export DESTDIR="$PKGDIR"
 }
 
 find_privkey() {
@@ -273,85 +276,85 @@ find_privkey() {
 }
 
 run_all() {
-  if [[ "$GEN_KEY" -eq 1 ]]; then
-    gen_key
-    exit 0
-  fi
+	if [[ "$GEN_KEY" -eq 1 ]]; then
+		gen_key
+		exit 0
+	fi
 
-  if (( SIGN_ONLY )); then
-    sign_only
-    create_repodata
-    exit 0
-  fi
+	if ((SIGN_ONLY)); then
+		sign_only
+		create_repodata
+		exit 0
+	fi
 
-  msg "Lint"
-  lint
+	msg "Lint"
+	lint
 
-  sync_deps
+	sync_deps
 
-  fetch
-  extract
-  detect_src
+	fetch
+	extract
+	detect_src
 
-  # estilo makepkg/xbps-src: cwd em srcdir
-  cd "$srcdir" || die "falha ao entrar em srcdir"
+	# estilo makepkg/xbps-src: cwd em srcdir
+	cd "$srcdir" || die "falha ao entrar em srcdir"
 
-  if declare -f prepare >/dev/null; then
-    msg "Prepare"
-    prepare
-  fi
+	if declare -f prepare >/dev/null; then
+		msg "Prepare"
+		prepare
+	fi
 
-  if declare -f build >/dev/null; then
-    msg "Build"
-    build
-  fi
+	if declare -f build >/dev/null; then
+		msg "Build"
+		build
+	fi
 
-   msg "Package"
+	msg "Package"
 
-   # staging único e seguro (Arch + Void)
-   mkdir -p "$DESTDIR"
-   [[ -n "$DESTDIR" && "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
+	# staging único e seguro (Arch + Void)
+	mkdir -p "$DESTDIR"
+	[[ -n "$DESTDIR" && "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
 
-   package
+	package
 
-#   for d in "${depends[@]}"; do
-#    pkg="${d%%[<>=]*}"
-#    xbps-query -R -p pkgname "$pkg" >/dev/null || die "dependência inválida ou inexistente: $d"
-#   done
+	#   for d in "${depends[@]}"; do
+	#    pkg="${d%%[<>=]*}"
+	#    xbps-query -R -p pkgname "$pkg" >/dev/null || die "dependência inválida ou inexistente: $d"
+	#   done
 
-   # depends já é array aqui (graças ao normalize_deps)
-   deps_list="${depends[*]}"
+	# depends já é array aqui (graças ao normalize_deps)
+	deps_list="${depends[*]}"
 
-   msg "Create XBPS"
-   cmd_run xbps-create \
-      -A "$ARCH" \
-      -n "${pkgname}-${pkgver}_${pkgrel}" \
-      -s "$pkgdesc" \
-      -l "$license" \
-      -D "$deps_list" \
-      "$pkgdir"
+	msg "Create XBPS"
+	cmd_run xbps-create \
+		-A "$ARCH" \
+		-n "${pkgname}-${pkgver}_${pkgrel}" \
+		-s "$pkgdesc" \
+		-l "$license" \
+		-D "$deps_list" \
+		"$pkgdir"
 
-  PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
-  mkdir -p "$REPODIR"
-  mv -f "$PKGOUT" "$REPODIR/"
+	PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
+	mkdir -p "$REPODIR"
+	mv -f "$PKGOUT" "$REPODIR/"
 
-  if (( SIGNPKG )); then
-    sign_only
-  fi
+	if ((SIGNPKG)); then
+		sign_only
+	fi
 
-  create_repodata
+	create_repodata
 
-  if [ "$INSTALLPKG" -eq 1 ]; then
-    msg "Install package"
-    if [[ "$FORCEPKG" -eq 1 ]]; then
-      sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
-    else
-      sudo xbps-install -R "$REPODIR" -S "$pkgname"
-    fi
-  else
-    msg "Install with:"
-    msg "  sudo xbps-install -R $REPODIR -S ${pkgname}"
-  fi
+	if [ "$INSTALLPKG" -eq 1 ]; then
+		msg "Install package"
+		if [[ "$FORCEPKG" -eq 1 ]]; then
+			sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
+		else
+			sudo xbps-install -R "$REPODIR" -S "$pkgname"
+		fi
+	else
+		msg "Install with:"
+		msg "  sudo xbps-install -R $REPODIR -S ${pkgname}"
+	fi
 
 }
 
@@ -360,8 +363,8 @@ clean() {
 }
 
 usage() {
- printf "%b\n" \
-"${bold_blue}pkgmake${reset} — utilitário de build para pacotes XBPS
+	printf "%b\n" \
+		"${bold_blue}pkgmake${reset} — utilitário de build para pacotes XBPS
 
 ${bold}Uso:${reset}
   pkgmake [opções]
@@ -411,20 +414,20 @@ sign_only() {
 }
 
 resolve_fns() {
-  # prepare
-  if ! declare -f prepare >/dev/null && declare -f do_prepare >/dev/null; then
-    prepare() { do_prepare "$@"; }
-  fi
+	# prepare
+	if ! declare -f prepare >/dev/null && declare -f do_prepare >/dev/null; then
+		prepare() { do_prepare "$@"; }
+	fi
 
-  # build
-  if ! declare -f build >/dev/null && declare -f do_build >/dev/null; then
-    build() { do_build "$@"; }
-  fi
+	# build
+	if ! declare -f build >/dev/null && declare -f do_build >/dev/null; then
+		build() { do_build "$@"; }
+	fi
 
-  # package / install
-  if ! declare -f package >/dev/null && declare -f do_install >/dev/null; then
-    package() { do_install "$@"; }
-  fi
+	# package / install
+	if ! declare -f package >/dev/null && declare -f do_install >/dev/null; then
+		package() { do_install "$@"; }
+	fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -445,11 +448,11 @@ while [[ $# -gt 0 ]]; do
 		QUIET=1
 		shift
 		;;
-   --gen-key)
-     GEN_KEY=1
-     shift
-   ;;
-   --sign)
+	--gen-key)
+		GEN_KEY=1
+		shift
+		;;
+	--sign)
 		SIGNPKG=1
 		shift
 		;;
@@ -461,7 +464,7 @@ while [[ $# -gt 0 ]]; do
 		PRIVKEY="$2"
 		shift 2
 		;;
-	-c|--clean)
+	-c | --clean)
 		clean
 		exit 0
 		;;
