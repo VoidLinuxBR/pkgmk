@@ -295,12 +295,8 @@ run_all() {
    xbps_deps=()
    for d in "${depends[@]}"; do
      xbps_deps+=("-D" "$d")
-   done
-
-   for d in "${depends[@]}"; do
-     pkg="${d%%[<>=]*}"
-     xbps-query -Rs "^${pkg}(-|$)" >/dev/null \
-       || die "dependência inválida ou inexistente: $d"
+#    pkg="${d%%[<>=]*}"
+#    xbps-query -R -p pkgname "$pkg" >/dev/null || die "dependência inválida ou inexistente: $d"
    done
 
   msg "Create XBPS"
