@@ -297,6 +297,11 @@ run_all() {
      xbps_deps+=("-D" "$d")
    done
 
+   for d in "${depends[@]}"; do
+     xbps-query -Rs "^${d}(-|$)" >/dev/null \
+       || die "dependência inválida ou inexistente: $d"
+   done
+
   msg "Create XBPS"
   cmd_run xbps-create \
     -A "$ARCH" \
