@@ -109,17 +109,25 @@ gen_key() {
 }
 
 normalize_deps() {
-  local v
-  for v in depends makedepends; do
-    if declare -p "$v" &>/dev/null; then
-      case "$(declare -p "$v")" in
-        declare\ -a*) : ;;                # já é array
-        *) eval "$v=(\${$v})" ;;          # string → array
-      esac
-    else
-      eval "$v=()"                        # não definido → vazio
+  # depends
+  if declare -p depends &>/dev/null; then
+    if [[ "$(declare -p depends)" != declare\ -a* ]]; then
+      depends="${depends//$'\n'/ }"
+      read -r -a depends <<< "$depends"
     fi
-  done
+  else
+    depends=()
+  fi
+
+  # makedepends
+  if declare -p makedepends &>/dev/null; then
+    if [[ "$(declare -p makedepends)" != declare\ -a* ]]; then
+      makedepends="${makedepends//$'\n'/ }"
+      read -r -a makedepends <<< "$makedepends"
+    fi
+  else
+    makedepends=()
+  fi
 }
 
 load_pkgfile() {
