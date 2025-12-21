@@ -1,9 +1,9 @@
-pkgmk — ferramenta simples de build e release para XBPS
+pkgmake — ferramenta simples de build e release para XBPS
 ======================================================
 
 DESCRIÇÃO
 ---------
-pkgmk é uma ferramenta no estilo makepkg (Arch) para empacotamento
+pkgmake é uma ferramenta no estilo makepkg (Arch) para empacotamento
 de software no Void Linux usando XBPS.
 
 Ela executa:
@@ -16,9 +16,9 @@ USO
 ---
 Entre em um diretório que contenha um arquivo Pkgfile e execute:
 
-  pkgmk build
-  pkgmk package
-  pkgmk release
+  pkgmake build
+  pkgmake package
+  pkgmake release
 
 COMANDOS
 --------
@@ -72,9 +72,9 @@ package() {
 
 NOTAS
 -----
-- pkgmk não substitui XBPS.
+- pkgmake não substitui XBPS.
 - A assinatura é feita no índice do repositório via xbps-rindex.
-- pkgmk não instala pacotes no sistema.
+- pkgmake não instala pacotes no sistema.
 
 LICENÇA
 -------
@@ -82,4 +82,4 @@ MIT
 
 AUTOR
 -----
-Projeto pkgmk
+Projeto pkgmake

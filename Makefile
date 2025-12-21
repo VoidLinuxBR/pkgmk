@@ -1,10 +1,10 @@
 PREFIX ?= /usr
 BINDIR  = $(PREFIX)/bin
-SHAREDIR = $(PREFIX)/share/pkgmk
-DOCDIR = $(PREFIX)/share/doc/pkgmk
+SHAREDIR = $(PREFIX)/share/pkgmake
+DOCDIR = $(PREFIX)/share/doc/pkgmake
 
 BIN_FILES = bin/pkgnew bin/pkgmake
-SHARE_FILES = share/pkgmk/*.sh
+SHARE_FILES = share/pkgmake/*.sh
 
 all:
 	@echo "Nada a compilar. Use: make install"
