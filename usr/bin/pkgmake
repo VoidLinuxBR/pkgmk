@@ -310,13 +310,18 @@ run_all() {
 
   create_repodata
 
-  if [[ "$INSTALLPKG" -eq 1 ]]; then
+  if [ "$INSTALLPKG" -eq 1 ]; then
+    msg "Install package"
     if [[ "$FORCEPKG" -eq 1 ]]; then
       sudo xbps-install -R "$REPODIR" -S -f "$pkgname"
     else
       sudo xbps-install -R "$REPODIR" -S "$pkgname"
     fi
+  else
+    msg "Install with:"
+    msg "  sudo xbps-install -R $REPODIR -S ${pkgname}"
   fi
+
 }
 
 clean() {
