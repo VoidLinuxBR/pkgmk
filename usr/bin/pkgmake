@@ -306,29 +306,30 @@ run_all() {
     build
   fi
 
-  msg "Package"
+   msg "Package"
 
-  # staging único e seguro (Arch + Void)
-  mkdir -p "$DESTDIR"
-  [[ -n "$DESTDIR" && "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
+   # staging único e seguro (Arch + Void)
+   mkdir -p "$DESTDIR"
+   [[ -n "$DESTDIR" && "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
 
-  package
+   package
 
-   xbps_dep_args=()
-   for d in "${depends[@]}"; do
-     xbps_dep_args+=("-D$d")
+#   for d in "${depends[@]}"; do
 #    pkg="${d%%[<>=]*}"
 #    xbps-query -R -p pkgname "$pkg" >/dev/null || die "dependência inválida ou inexistente: $d"
-   done
+#   done
 
-  msg "Create XBPS"
-  cmd_run xbps-create \
-    -A "$ARCH" \
-    -n "${pkgname}-${pkgver}_${pkgrel}" \
-    -s "$pkgdesc" \
-    -l "$license" \
-    "${xbps_deps[@]}" \
-    "$pkgdir"
+   # cria uma única string com todas as dependências
+   deps_list="$(printf '%s ' "${depends[@]}")"
+
+   msg "Create XBPS"
+   cmd_run xbps-create \
+      -A "$ARCH" \
+      -n "${pkgname}-${pkgver}_${pkgrel}" \
+      -s "$pkgdesc" \
+      -l "$license" \
+      -D "$deps_list" \
+      "$pkgdir"
 
   PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
   mkdir -p "$REPODIR"
