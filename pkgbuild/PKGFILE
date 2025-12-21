@@ -12,6 +12,7 @@ provides=("$pkgname")
 source=("git+${url}.git")
 md5sums=('SKIP')
 depends=(
+	"base-devel>=0"
 	"bash>=0"
 	"curl>=0"
 	"git>=0"
