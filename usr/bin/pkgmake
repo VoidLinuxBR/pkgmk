@@ -108,6 +108,20 @@ gen_key() {
   msg "  $KEY_FILE"
 }
 
+normalize_deps() {
+  local v
+  for v in depends makedepends; do
+    if declare -p "$v" &>/dev/null; then
+      case "$(declare -p "$v")" in
+        declare\ -a*) : ;;                # já é array
+        *) eval "$v=(\${$v})" ;;          # string → array
+      esac
+    else
+      eval "$v=()"                        # não definido → vazio
+    fi
+  done
+}
+
 load_pkgfile() {
 	[[ -f PKGFILE ]] || die "PKGFILE não encontrado"
 	source ./PKGFILE
@@ -451,5 +465,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 load_pkgfile
+normalize_deps
 resolve_fns
 run_all
