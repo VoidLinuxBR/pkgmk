@@ -101,7 +101,11 @@ bg_white='\033[47m'
 
 parse_config() {
 	# Load global config
+	set +e
 	[[ -f /etc/pkgmake.conf ]] && source /etc/pkgmake.conf
+   ret=$?
+   set -e
+   ((ret == 0)) || die "erro ao carregar PKGFILE"
 }
 
 validate_config() {
@@ -231,8 +235,8 @@ load_pkgfile() {
 	declare -p source &>/dev/null || die "source não definido"
 	HAS_GIT_SOURCE=0
 	for s in "${source[@]}"; do
-      [[ "$s" == git+* ]] && HAS_GIT_SOURCE=1 || true
-   done
+      [[ "$s" == *git+* ]] && HAS_GIT_SOURCE=1 || true
+	done
 }
 
 lint() {
@@ -254,47 +258,67 @@ sync_deps() {
 }
 
 fetch() {
-	msg "Fetch source"
-	mkdir -p "$SRCDIR"
-	cd "$SRCDIR"
+  msg "Fetch source"
+  mkdir -p "$SRCDIR"
+  cd "$SRCDIR"
 
-	for s in "${source[@]}"; do
-		s="${s#*::}"
+  for src in "${source[@]}"; do
+    # alias::source
+    if [[ "$src" == *::* ]]; then
+      name="${src%%::*}"
+      s="${src#*::}"
+    else
+      name=""
+      s="$src"
+    fi
 
-		case "$s" in
-		git+*)
-			repo="${s#git+}"
-			name="$(basename "$repo" .git)"
+    case "$s" in
+      git+*)
+        repo="${s#git+}"
 
-			if [[ -d "$name/.git" ]]; then
-				msg "Usando repositório git existente: $name"
-			else
-				cmd_run git clone "$repo" "$name" || die "falha ao clonar $repo"
-			fi
-			;;
-		http://* | https://*)
-			f="${s##*/}"
-			if [[ -f "$f" ]]; then
-				msg "Source já existe, usando cache: $f"
-			else
-				if ! cmd_run curl -fL --output "./$f" -- "$s"; then
-					case "$f" in
-					*.asc | *.sig)
-						warn "assinatura não encontrada ($f), ignorando"
-						;;
-					*)
-						die "falha ao baixar source obrigatório: $f"
-						;;
-					esac
-				fi
-			fi
-			;;
-		*)
-			[[ -f "$WORKDIR/$s" ]] || die "arquivo local não encontrado: $s"
-			cp -f "$WORKDIR/$s" .
-			;;
-		esac
-	done
+        tag=""
+        if [[ "$repo" == *#tag=* ]]; then
+          tag="${repo##*#tag=}"
+          repo="${repo%%#tag=*}"
+        fi
+
+        # se não tiver alias, usa basename
+        [[ -z "$name" ]] && name="$(basename "$repo" .git)"
+
+        if [[ -d "$name/.git" ]]; then
+          msg "Usando repositório git existente: $name"
+        else
+          cmd_run git clone "$repo" "$name" || die "falha ao clonar $repo"
+        fi
+
+        if [[ -n "$tag" ]]; then
+          cmd_run git -C "$name" checkout "$tag" \
+            || die "falha ao fazer checkout do tag $tag"
+        fi
+        ;;
+      http://*|https://*)
+        f="${s##*/}"
+        if [[ -f "$f" ]]; then
+          msg "Source já existe, usando cache: $f"
+        else
+          if ! cmd_run curl -fL --output "./$f" -- "$s"; then
+            case "$f" in
+              *.asc|*.sig)
+                warn "assinatura não encontrada ($f), ignorando"
+                ;;
+              *)
+                die "falha ao baixar source obrigatório: $f"
+                ;;
+            esac
+          fi
+        fi
+        ;;
+      *)
+        [[ -f "$WORKDIR/$s" ]] || die "arquivo local não encontrado: $s"
+        cp -f "$WORKDIR/$s" .
+        ;;
+    esac
+  done
 }
 
 extract() {
@@ -331,7 +355,8 @@ extract() {
 		return 0
 	fi
 
-	((extracted)) || die "nenhum tarball foi extraído"
+   # se tiver fonte git, não exige tarball
+   ((extracted)) || [[ "$HAS_GIT_SOURCE" -eq 1 ]] || die "nenhum tarball foi extraído"
 }
 
 detect_src() {
