@@ -292,12 +292,18 @@ run_all() {
 
   package
 
+   xbps_deps=()
+   for d in "${depends[@]}"; do
+     xbps_deps+=("-D" "$d")
+   done
+
   msg "Create XBPS"
   cmd_run xbps-create \
     -A "$ARCH" \
     -n "${pkgname}-${pkgver}_${pkgrel}" \
     -s "$pkgdesc" \
     -l "$license" \
+    "${xbps_deps[@]}" \
     "$pkgdir"
 
   PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
