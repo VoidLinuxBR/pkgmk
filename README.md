@@ -86,122 +86,35 @@ sudo ./install.sh
 ---
 
 USO
-Executar diretamente:
-
-```sh
-pkgmake --help
+---
 ```
-Execute o comando **dentro de um diretório que contenha um `Pkgfile`**.
+pkgmake — utilitário de build para pacotes XBPS
 
-```sh
-pkgmake [opções]
+Uso:
+  pkgmake [opções]
+
+Opções:
+  -s, --syncdeps               Instalar depends e makedepends
+  -i, --install                Instalar pacote após o build
+  -f, --force                  Forçar reinstalação do pacote
+  -q, --quiet                  Silenciar saída dos comandos
+  -v, --verbose                Mostrar saída dos comandos
+      --sign                   Assinar pacote após o build
+      --sign-only              Somente assinar pacotes existentes no repo
+      --privkey <path>         Caminho da chave privada PEM (autodetecta se omitido)
+      --gen-key                Gerar chave RSA 4096 em formato PEM
+  -c|--clean                   Limpar diretórios de trabalho
+  -p|--print-config            Imprimir configuracao do /etc/pkgmake.conf
+  -k|--pkgdest <path>          Diretório local onde os pacotes (.xbps) e o repodata serão gerados
+  -h, --help                   Mostrar este ajuda
+
+Exemplos:
+  pkgmake
+  pkgmake -s -i
+  pkgmake --sign
+  pkgmake --sign-only --privkey minha-chave.pem
+  pkgmake -q
 ```
-
-EXEMPLOS COMUNS
-----------------
-
-Resolver dependências, buildar e empacotar:
-```sh
-pkgmake -s
-```
-
-Buildar e instalar o pacote:
-```sh
-pkgmake -s -i
-```
-
-Forçar reinstalação do pacote:
-```sh
-pkgmake -s -i -f
-```
-
-Modo verboso:
-```sh
-pkgmake -s -v
-```
-
-Modo silencioso:
-```sh
-pkgmake -s -q
-```
-
-Assinar pacote após o build:
-```sh
-pkgmake -s --sign
-```
-
-Assinar apenas pacotes já existentes no repositório:
-```sh
-pkgmake --sign-only
-```
-
-Gerar chave RSA 4096 (PEM):
-```sh
-pkgmake --gen-key
-```
-
-Usar chave privada específica:
-```sh
-pkgmake --privkey /caminho/da/chave.pem
-```
-
-Limpar diretórios de trabalho:
-```sh
-pkgmake -c
-```
-
-Imprimir configuração carregada:
-```sh
-pkgmake -p
-```
-
-Definir diretório de saída dos pacotes:
-```sh
-pkgmake -k /caminho/do/repo
-```
-
-OPÇÕES (FLAGS)
---------------
--s, --syncdeps  
-    Instala `depends` e `makedepends`.
-
--i, --install  
-    Instala o pacote após o build.
-
--f, --force  
-    Força reinstalação do pacote.
-
--q, --quiet  
-    Silencia a saída dos comandos.
-
--v, --verbose  
-    Mostra a saída completa dos comandos.
-
---sign  
-    Assina o pacote após o build.
-
---sign-only  
-    Assina apenas pacotes já existentes no repositório.
-
---privkey <path>  
-    Caminho para chave privada PEM.
-    Se omitido, tenta autodetectar.
-
---gen-key  
-    Gera uma chave RSA 4096 em formato PEM.
-
--c, --clean  
-    Remove diretórios de trabalho.
-
--p, --print-config  
-    Imprime a configuração carregada de `/etc/pkgmake.conf`.
-
--k, --pkgdest <path>  
-    Diretório local onde os pacotes `.xbps`
-    e os dados do repositório serão gerados.
-
--h, --help  
-    Mostra a ajuda.
 
 ARQUIVO DE CONFIGURAÇÃO
 -----------------------
