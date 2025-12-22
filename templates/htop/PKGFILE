@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+# Maintainer: Catafesta <vcatafesta@chililinux.com>
+
+pkgname=htop
+pkgver=3.4.1
+pkgrel=1
+pkgdesc="Interactive process viewer"
+license="GPL-2.0"
+depends="ncurses"
+makedepends="autoconf automake libtool pkg-config make gcc ncurses-devel"
+source="https://github.com/htop-dev/htop/archive/${pkgver}.tar.gz"
+
+prepare() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  autoreconf -fi
+}
+
+build() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  ./configure --prefix=/usr
+  make
+}
+
+package() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  make DESTDIR="$pkgdir" install
+}
+

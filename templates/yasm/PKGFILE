@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# NOTE: Imported from Arch PKGBUILD
+# NOTE: This PKGFILE is PARTIAL and MUST be reviewed
+# Maintainer: Vilmar Catafesta <vcatafesta@gmail.com>
+
+pkgname=yasm
+pkgver=1.3.0
+pkgrel=9
+pkgdesc="A rewrite of NASM to allow for multiple syntax supported (NASM, TASM, GAS, etc.)"
+arch=('x86_64')
+license=('BSD-2-Clause OR BSD-3-Clause' 'GPL-2.0-only' 'LGPL-2.1-only' 'Artistic-1.0-Perl')
+depends=('glibc')
+makedepends=('git' 'python' 'xmlto')
+checkdepends=('systemd')
+options=('staticlibs')
+#source=("https://github.com/yasm/yasm/releases/download/v${pkgver}/yasm-${pkgver}.tar.gz")
+url='https://github.com/yasm/yasm'
+source=("$pkgname::git+$url#tag=v$pkgver")
+#prepare() {
+#	cd "${srcdir}/${pkgname}-${pkgver}"
+#
+#	# só roda autoreconf se NÃO existir configure
+#	if [ ! -x ./configure ] && [ -f configure.ac -o -f configure.in ]; then
+#		autoreconf -vfi
+#	fi
+#}
+
+prepare() {
+  cd "$pkgname"
+  # Backport support for .note.gnu.property sections
+  # https://github.com/yasm/yasm/pull/148
+  git cherry-pick --no-commit 0799f381d513e18f404654047fa1b412084968c8
+
+  # FTBFS due to autotools 2.70+
+  # https://github.com/yasm/yasm/pull/178
+  git cherry-pick --no-commit 3e74376b5653102a3957f59005969fcdbbe5a89d
+
+  # Ensure package is reproducible
+  # https://github.com/yasm/yasm/pull/198
+  git cherry-pick --no-commit 61e374f24718975e8175f048e70afaaf0c4771a9
+
+  # FTBFS due to GCC15+
+  # https://github.com/yasm/yasm/pull/287
+# git cherry-pick --no-commit 64ef740eb262f329e55eebadf2ce276b146d44e9
+
+  # generate version file
+  echo "$pkgver" > version
+
+  autoreconf -vfi
+}
+
+build() {
+	cd "${pkgname}"
+	CC=gcc ./configure --prefix=/usr
+	make
+}
+
+package() {
+	cd "${pkgname}"
+	make DESTDIR="$PKGDIR" install
+}

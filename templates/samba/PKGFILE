@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# NOTE: This PKGFILE is PARTIAL and MUST be reviewed
+# Maintainer: Vilmar Catafesta <vcatafesta@gmail.com>
+
+pkgname=samba
+pkgbase=samba
+pkgdesc="SMB/CIFS file, print, and login server for Unix"
+pkgver=4.23.4
+pkgrel=1
+arch=(x86_64)
+url="https://www.samba.org"
+license=('GPL-3.0-or-later')
+makedepends=(
+	acl
+	attr
+	attr-devel
+	autoconf
+	automake
+	avahi
+	avahi-libs
+	base-devel
+	binutils
+	bind
+	bison
+	ccache
+	chrpath
+	cups-devel
+	curl
+	dateutils
+	dbus
+	dbus-devel
+	docbook-xml
+	docbook-xsl
+	flex
+	gcc
+	git
+	glib-devel
+	glusterfs
+	gnutls
+	gnutls-devel
+	gpgme-devel
+	htop
+	icu-devel
+	jansson
+	jansson-devel
+	ldns
+	libarchive-devel
+	libblkid-devel
+	libbsd
+	libbsd-devel
+	libcap
+	libcap-devel
+	libcups
+	libldap
+	libldap-devel
+	libnsl
+	libpcap-devel
+	libtasn1
+	libtasn1-devel
+	libtasn1-tools
+	libtirpc
+	libtirpc-devel
+	libunwind-devel
+	liburing
+	libuuid-devel
+	libxslt
+	linux-headers
+	lmdb
+	lmdb-devel
+	make
+	mit-krb5
+	mit-krb5-client
+	mit-krb5-devel
+	ncurses-devel
+	net-tools
+	pam
+	pam-devel
+	perl
+	perl-JSON
+	perl-Parse-Yapp
+	perl-Text-ParseWords
+	pkg-config
+	popt
+	popt-devel
+	python
+	python3
+	python3-cryptography
+	python3-devel
+	python3-dnspython
+	python3-matplotlib
+	python3-pexpect
+	python3-pyasn1
+	readline
+	readline-devel
+	rpcsvc-proto
+	rsync
+	talloc
+	tdb
+	tdb-devel
+	tevent
+	tree
+	vim
+	wget
+	xfsprogs-devel
+	zlib-devel
+	python3-devel
+	perl-Parse-Yapp
+	gperf
+	libtirpc-devel
+	linux-headers
+	gnutls-devel
+	jansson-devel
+	lmdb-devel
+	popt-devel
+	readline-devel
+	flex
+	bison
+	libxslt
+	docbook-xsl
+)
+epoch=2
+source=(https://download.samba.org/samba/ftp/stable/${pkgbase}-${pkgver}.tar.gz)
+
+build() {
+	cd "$pkgname-$pkgver"
+
+	# Limpeza completa obrigatória (remove configurações e caches antigos que causam o erro)
+	make distclean || true
+	rm -rf bin/
+
+	export PYTHONHASHSEED=1
+	_samba4_idmap_modules="idmap_ad,idmap_rid,idmap_adex,idmap_hash,idmap_tdb2"
+	_samba4_pdb_modules="pdb_tdbsam,pdb_ldap,pdb_ads,pdb_smbpasswd,pdb_wbc_sam,pdb_samba4"
+	_samba4_auth_modules="auth_unix,auth_wbc,auth_server,auth_netlogond,auth_script,auth_samba4"
+
+	./configure \
+		--enable-fhs \
+		--prefix=/opt/samba \
+		--sysconfdir=/etc \
+		--sbindir=/usr/bin \
+		--libdir=/usr/lib \
+		--libexecdir=/usr/lib/samba \
+		--localstatedir=/var \
+		--with-configdir=/etc/samba \
+		--with-lockdir=/var/cache/samba \
+		--with-sockets-dir=/run/samba \
+		--with-piddir=/run \
+		--with-ads \
+		--with-ldap \
+		--with-winbind \
+		--with-acl-support \
+		--with-pam \
+		--with-pammodulesdir=/usr/lib/security \
+		--private-libraries='!ldb' \
+		--bundled-libraries='!tdb,!talloc,!pytalloc-util,!tevent,!popt,!pyldb-util' \
+		--with-shared-modules="${_samba4_idmap_modules},${_samba4_pdb_modules},${_samba4_auth_modules},vfs_io_uring" \
+		--disable-rpath-install \
+		--with-profiling-data
+
+	make
+}
+
+package() {
+	cd ${pkgbase}-${pkgver}
+	make -j$(nproc) DESTDIR="${_pkgsrc}/" install
+}

@@ -53,6 +53,7 @@ PKGDIR="$WORKDIR/pkg"
 ARCH="$(uname -m)"
 
 SYNCDEPS=0
+CLI_SYNCDEPS=""
 INSTALLPKG=0
 FORCEPKG=0
 PRIVKEY=""
@@ -77,35 +78,15 @@ blue='\033[0;34m'
 magenta='\033[0;35m'
 cyan='\033[0;36m'
 white='\033[0;37m'
-
-# Bold
 bold='\033[1m'
-bold_black='\033[1;30m'
-bold_red='\033[1;31m'
-bold_green='\033[1;32m'
-bold_yellow='\033[1;33m'
-bold_blue='\033[1;34m'
-bold_magenta='\033[1;35m'
-bold_cyan='\033[1;36m'
-bold_white='\033[1;37m'
-
-# Backgrounds
-bg_black='\033[40m'
-bg_red='\033[41m'
-bg_green='\033[42m'
-bg_yellow='\033[43m'
-bg_blue='\033[44m'
-bg_magenta='\033[45m'
-bg_cyan='\033[46m'
-bg_white='\033[47m'
 
 parse_config() {
 	# Load global config
 	set +e
 	[[ -f /etc/pkgmake.conf ]] && source /etc/pkgmake.conf
-   ret=$?
-   set -e
-   ((ret == 0)) || die "erro ao carregar PKGFILE"
+	ret=$?
+	set -e
+	((ret == 0)) || die "erro ao carregar PKGFILE"
 }
 
 validate_config() {
@@ -142,10 +123,12 @@ validate_pkgdest_sanity() {
 
 cmd_run() {
 	if [[ "$VERBOSE" -eq 0 ]]; then
-		"$@" >/dev/null 2>&1
+		"$@" >/dev/null
 	else
 		"$@"
 	fi
+	local rc=$?
+	[[ $rc -eq 0 ]] || die "comando falhou: $*"
 }
 
 die() {
@@ -235,7 +218,7 @@ load_pkgfile() {
 	declare -p source &>/dev/null || die "source não definido"
 	HAS_GIT_SOURCE=0
 	for s in "${source[@]}"; do
-      [[ "$s" == *git+* ]] && HAS_GIT_SOURCE=1 || true
+		[[ "$s" == *git+* ]] && HAS_GIT_SOURCE=1 || true
 	done
 }
 
@@ -248,77 +231,93 @@ lint() {
 	fi
 }
 
+strip_dep_op() {
+	local d="$1"
+	d="${d%%>=*}"
+	d="${d%%<=*}"
+	d="${d%%=*}"
+	echo "$d"
+}
+
 sync_deps() {
 	[[ "$SYNCDEPS" -eq 1 ]] || return 0
+
 	local pkgs=()
 	[[ -n "${makedepends[*]}" ]] && pkgs+=("${makedepends[@]}")
 	[[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
 	[[ "${#pkgs[@]}" -eq 0 ]] && return 0
-	sudo xbps-install -Sy "${pkgs[@]}"
+
+	local clean=()
+	for d in "${pkgs[@]}"; do
+		clean+=("$(strip_dep_op "$d")")
+	done
+
+	cmd_run sudo xbps-install -Sy "${clean[@]}"
 }
 
 fetch() {
-  msg "Fetch source"
-  mkdir -p "$SRCDIR"
-  cd "$SRCDIR"
+	msg "Fetch source"
+	mkdir -p "$SRCDIR"
+	cd "$SRCDIR"
 
-  for src in "${source[@]}"; do
-    # alias::source
-    if [[ "$src" == *::* ]]; then
-      name="${src%%::*}"
-      s="${src#*::}"
-    else
-      name=""
-      s="$src"
-    fi
+	for src in "${source[@]}"; do
+		# alias::source
+		if [[ "$src" == *::* ]]; then
+			name="${src%%::*}"
+			s="${src#*::}"
+		else
+			name=""
+			s="$src"
+		fi
 
-    case "$s" in
-      git+*)
-        repo="${s#git+}"
+		case "$s" in
+		git+*)
+			repo="${s#git+}"
 
-        tag=""
-        if [[ "$repo" == *#tag=* ]]; then
-          tag="${repo##*#tag=}"
-          repo="${repo%%#tag=*}"
-        fi
+			tag=""
+			if [[ "$repo" == *#tag=* ]]; then
+				tag="${repo##*#tag=}"
+				repo="${repo%%#tag=*}"
+			fi
 
-        # se não tiver alias, usa basename
-        [[ -z "$name" ]] && name="$(basename "$repo" .git)"
+			# se não tiver alias, usa basename
+			[[ -z "$name" ]] && name="$(basename "$repo" .git)"
 
-        if [[ -d "$name/.git" ]]; then
-          msg "Usando repositório git existente: $name"
-        else
-          cmd_run git clone "$repo" "$name" || die "falha ao clonar $repo"
-        fi
+			if [[ -d "$name/.git" ]]; then
+				msg "Usando repositório git existente: $name"
+			else
+				cmd_run git clone "$repo" "$name" || die "falha ao clonar $repo"
+			fi
 
-        if [[ -n "$tag" ]]; then
-          cmd_run git -C "$name" checkout "$tag" \
-            || die "falha ao fazer checkout do tag $tag"
-        fi
-        ;;
-      http://*|https://*)
-        f="${s##*/}"
-        if [[ -f "$f" ]]; then
-          msg "Source já existe, usando cache: $f"
-        else
-          if ! cmd_run curl -fL --output "./$f" -- "$s"; then
-            case "$f" in
-              *.asc|*.sig)
-                warn "assinatura não encontrada ($f), ignorando"
-                ;;
-              *)
-                die "falha ao baixar source obrigatório: $f"
-                ;;
-            esac
-          fi
-        fi
-        ;;
-      *)
-        [[ -f "$WORKDIR/$s" ]] || die "arquivo local não encontrado: $s"
-        cp -f "$WORKDIR/$s" .
-        ;;
-    esac
-  done
+			if [[ -n "$tag" ]]; then
+				cmd_run git -C "$name" checkout "$tag" ||
+					die "falha ao fazer checkout do tag $tag"
+			fi
+			;;
+		http://* | https://*)
+			f="${s##*/}"
+			if [[ -f "$f" ]]; then
+				msg "Source já existe, usando cache: $f"
+			else
+			   msg "Fetching: $s"
+				if ! curl -fL --output "./$f" -- "$s"; then
+					case "$f" in
+					*.asc | *.sig)
+						warn "assinatura não encontrada ($f), ignorando"
+						;;
+					*)
+						die "falha ao baixar source obrigatório: $f"
+						;;
+					esac
+				fi
+			fi
+			;;
+		*)
+			[[ -f "$WORKDIR/$s" ]] || die "arquivo local não encontrado: $s"
+			cp -f "$WORKDIR/$s" .
+			;;
+		esac
+	done
 }
 
 extract() {
@@ -355,8 +354,8 @@ extract() {
 		return 0
 	fi
 
-   # se tiver fonte git, não exige tarball
-   ((extracted)) || [[ "$HAS_GIT_SOURCE" -eq 1 ]] || die "nenhum tarball foi extraído"
+	# se tiver fonte git, não exige tarball
+	((extracted)) || [[ "$HAS_GIT_SOURCE" -eq 1 ]] || die "nenhum tarball foi extraído"
 }
 
 detect_src() {
@@ -621,6 +620,14 @@ resolve_signpkg() {
 	esac
 }
 
+resolve_syncdeps() {
+	if [[ -n "$CLI_SYNCDEPS" ]]; then
+		SYNCDEPS=1
+	elif [[ -z "$SYNCDEPS" ]]; then
+		SYNCDEPS=0
+	fi
+}
+
 resolve_verbose() {
 	if [[ -n "$CLI_VERBOSE" ]]; then
 		VERBOSE="$CLI_VERBOSE"
@@ -637,7 +644,7 @@ resolve_verbose() {
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	-s | --syncdeps)
-		SYNCDEPS=1
+		CLI_SYNCDEPS=1
 		shift
 		;;
 	-i | --install)
@@ -693,6 +700,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 parse_config
+resolve_syncdeps
 resolve_signpkg
 resolve_verbose
 resolve_pkgdest # blindagem de path + permissão (ANTES de tudo)
@@ -701,4 +709,5 @@ normalize_deps
 normalize_dep_patterns
 resolve_fns
 validate_config # validação FINAL, com tudo resolvido
+sync_deps
 run_all
