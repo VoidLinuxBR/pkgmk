@@ -30,7 +30,7 @@ O pkgmake pode:
 DOWNLOAD E INSTALAÇÃO
 ---------------------
 
-### Via git clone
+### 1. Via git clone
 
 ```bash
 # Clone o repositório
@@ -54,6 +54,35 @@ Remoção:
 sudo make uninstall
 ```
 
+### 2. Via wget ou curl (instalação direta)
+
+Instalação rápida executando o script diretamente do GitHub.
+
+#### Usando curl
+```sh
+curl -fsSL https://raw.githubusercontent.com/voidlinuxbr/pkgmake/main/install.sh | sudo bash
+```
+
+#### Usando wget
+```sh
+wget -qO- https://raw.githubusercontent.com/voidlinuxbr/pkgmake/main/install.sh | sudo bash
+```
+
+Este método:
+- não requer git
+- instala os mesmos arquivos do método via Makefile
+- **não sobrescreve** configurações existentes
+- cria `/etc/pkgmake.conf.pacnew` quando necessário
+
+---
+
+### Execução manual do instalador (alternativa)
+
+```sh
+wget https://raw.githubusercontent.com/voidlinuxbr/pkgmake/main/install.sh
+chmod +x install.sh
+sudo ./install.sh
+```
 ---
 
 USO
