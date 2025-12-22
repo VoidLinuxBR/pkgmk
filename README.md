@@ -20,7 +20,7 @@ FUNCIONALIDADES
 O pkgmake pode:
 
 - Resolver e instalar dependências (`depends` e `makedepends`)
-- Executar build e empacotamento a partir de um `Pkgfile`
+- Executar build e empacotamento a partir de um `PKGFILE`
 - Criar pacotes `.xbps`
 - Instalar o pacote gerado (opcional)
 - Assinar pacotes ou repositórios
@@ -127,9 +127,9 @@ O pkgmake carrega automaticamente:
 Valores definidos via **linha de comando sobrescrevem**
 o arquivo de configuração.
 
-ARQUIVO Pkgfile
+ARQUIVO PKGFILE
 ---------------
-O **Pkgfile** é um script shell simples.
+O **PKGFILE** é um script shell simples.
 
 Campos comuns:
 - pkgname
@@ -176,10 +176,10 @@ REQUISITOS
 
 NOTAS IMPORTANTES
 -----------------
-- pkgmake **não substitui** o XBPS
+- pkgmake **não substitui** o XBPS, ele usa as ferramentas!
 - Deve ser executado como **usuário comum**
 - Apenas a instalação de dependências requer privilégios
-- O fluxo segue estritamente o que está definido no `Pkgfile`
+- O fluxo segue estritamente o que está definido no `PKGFILE`
 
 LICENÇA
 -------
