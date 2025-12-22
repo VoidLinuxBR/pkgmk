@@ -36,10 +36,7 @@ DOWNLOAD E INSTALAÇÃO
 # Clone o repositório
 git clone --depth=1 https://github.com/<usuario>/pkgmake.git
 cd pkgmake
-```
-
-```sh
-# Instalação via Makefile
+# Instale via Makefile
 sudo make install
 ```
 
