@@ -32,14 +32,14 @@ DOWNLOAD E INSTALAÇÃO
 
 ### Via git clone
 
-```sh
+```bash
+# Clone o repositório
 git clone --depth=1 https://github.com/<usuario>/pkgmake.git
 cd pkgmake
 ```
 
-### Instalação via Makefile
-
 ```sh
+# Instalação via Makefile
 sudo make install
 ```
 
@@ -50,7 +50,7 @@ Instala por padrão:
 
 Remoção:
 
-```sh
+```bash
 sudo make uninstall
 ```
 
