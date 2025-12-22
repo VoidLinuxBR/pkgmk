@@ -76,7 +76,7 @@ Este método:
 
 ---
 
-### Execução manual do instalador (alternativa)
+#### Execução manual do instalador (alternativa)
 
 ```sh
 wget https://raw.githubusercontent.com/voidlinuxbr/pkgmake/main/install.sh
