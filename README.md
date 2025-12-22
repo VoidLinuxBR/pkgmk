@@ -74,9 +74,42 @@ Este método:
 - **não sobrescreve** configurações existentes
 - cria `/etc/pkgmake.conf.pacnew` quando necessário
 
----
+### 3. Instalação via repositório XBPS (recomendado)
 
-#### Execução manual do instalador (alternativa)
+O **pkgmake** também está disponível como pacote em repositório XBPS.
+
+Este é o método **recomendado**, pois permite atualização automática
+e integração total com o sistema.
+
+#### Adicionar o repositório
+
+Crie o arquivo de repositório:
+
+```sh
+echo "repository=https://void.chililinux.com/voidlinux/current" \
+  | sudo tee /etc/xbps.d/chililinux.conf
+```
+
+Atualize os índices:
+
+```sh
+sudo xbps-install -S
+```
+
+Instale o pacote:
+
+```sh
+sudo xbps-install pkgmake
+```
+
+Após a instalação, o comando `pkgmake` estará disponível em `/usr/bin/pkgmake`.
+
+Este método:
+- integra com o sistema de pacotes do Void Linux
+- permite atualizações via `xbps-install -Su`
+- não requer scripts externos ou instalação manual
+
+### 4. Execução manual do instalador (alternativa)
 
 ```sh
 wget https://raw.githubusercontent.com/voidlinuxbr/pkgmake/main/install.sh
