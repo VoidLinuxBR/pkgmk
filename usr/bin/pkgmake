@@ -5,14 +5,13 @@
 #  pkgmake — makepkg-like tool for XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: dom 21 dez 2025 11:47:51 -04
+#  Updated: ter 23 dez 2025 00:21:48 -03
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
 #  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
-#  modification, are permitted provided that the following conditions
 #  are met:
 #  1. Redistributions of source code must retain the above copyright
 #     notice, this list of conditions and the following disclaimer.
@@ -68,17 +67,32 @@ PRINTCONFIG=0
 PKGDEST=""
 CLI_PKGDEST=""
 
-# ANSI colors
-reset='\033[0m'
-black='\033[0;30m'
-red='\033[0;31m'
-green='\033[0;32m'
-yellow='\033[0;33m'
-blue='\033[0;34m'
-magenta='\033[0;35m'
-cyan='\033[0;36m'
-white='\033[0;37m'
-bold='\033[1m'
+# Colors: prefer tput, fallback to ANSI
+if command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
+  reset="$(tput sgr0)"
+  bold="$(tput bold)"
+
+  black="$(tput setaf 0)"
+  red="$(tput setaf 1)"
+  green="$(tput setaf 2)"
+  yellow="$(tput setaf 3)"
+  blue="$(tput setaf 4)"
+  magenta="$(tput setaf 5)"
+  cyan="$(tput setaf 6)"
+  white="$(tput setaf 7)"
+else
+   # ANSI colors
+   reset='\033[0m'
+   black='\033[0;30m'
+   red='\033[0;31m'
+   green='\033[0;32m'
+   yellow='\033[0;33m'
+   blue='\033[0;34m'
+   magenta='\033[0;35m'
+   cyan='\033[0;36m'
+   white='\033[0;37m'
+   bold='\033[1m'
+fi
 
 validate_pkgname() {
 	local name="$1"
@@ -291,53 +305,70 @@ from_arch() {
 # Importa template oficial do Void Linux (void-packages)
 # -------------------------------------------------------------------
 from_void() {
-	local pkg="$1"
-	local DIRPKGFILE="$2"
-	local VOID_REPO="https://raw.githubusercontent.com/void-linux/void-packages/master"
-	local TMP
-	TMP="$(mktemp -d)"
+  local pkg="$1"
+  local DIRPKGFILE="$2"
+  local VOID_REPO="https://raw.githubusercontent.com/void-linux/void-packages/master"
+  local TMP
+  TMP="$(mktemp -d)"
 
-	[[ -z "$pkg" ]] && die "nome do pacote não informado"
+  [[ -z "$pkg" ]] && die "nome do pacote não informado"
 
-	msg "Importando template do Void Linux: $pkg"
-	msg "Fonte: void-linux/void-packages"
+  msg "Importando template do Void Linux: $pkg"
+  msg "Fonte: void-linux/void-packages"
 
-	# Escolhe downloader
-	if command -v curl >/dev/null 2>&1; then
-		DL="curl -fsSL"
-	elif command -v wget >/dev/null 2>&1; then
-		DL="wget -qO-"
-	else
-		die "necessário 'curl' ou 'wget' para download"
-	fi
+  # Escolhe downloader
+  if command -v curl >/dev/null 2>&1; then
+    DL="curl -fsSL"
+  elif command -v wget >/dev/null 2>&1; then
+    DL="wget -qO-"
+  else
+    die "necessário 'curl' ou 'wget' para download"
+  fi
 
-	# Baixa template oficial
-	if ! $DL "$VOID_REPO/srcpkgs/$pkg/template" >"$TMP/template" 2>/dev/null; then
-		rm -rf "$TMP"
-		die "template do Void não encontrado para pacote '$pkg'"
-	fi
+  # Baixa template oficial (obrigatório)
+  if ! $DL "$VOID_REPO/srcpkgs/$pkg/template" >"$TMP/template" 2>/dev/null; then
+    rm -rf "$TMP"
+    die "template do Void não encontrado para pacote '$pkg'"
+  fi
 
-	# Cria diretório do pacote
-	mkdir -p "${DIRPKGFILE}"
-	cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE} '"
+  # Tenta baixar INSTALL (opcional)
+  if $DL "$VOID_REPO/srcpkgs/$pkg/INSTALL" >"$TMP/INSTALL" 2>/dev/null; then
+    HAS_INSTALL=1
+  else
+    HAS_INSTALL=0
+  fi
 
-	# Gera PKGFILE com aviso explícito
-	{
-		echo "#!/usr/bin/env bash"
-		echo "# NOTE: Imported from Void Linux official template"
-		echo "# NOTE: Source: https://github.com/void-linux/void-packages"
-		echo "# NOTE: This PKGFILE MUST be reviewed and adjusted before use"
-		echo
-		cat "$TMP/template"
-	} >PKGFILE
+  # Cria diretório do pacote
+  mkdir -p "${DIRPKGFILE}"
+  cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE}'"
 
-	cd - >/dev/null || true
-	rm -rf "$TMP"
+  # Gera PKGFILE com aviso explícito
+  {
+    echo "#!/usr/bin/env bash"
+    echo "# NOTE: Imported from Void Linux official template"
+    echo "# NOTE: Source: https://github.com/void-linux/void-packages"
+    echo "# NOTE: This PKGFILE MUST be reviewed and adjusted before use"
+    echo
+    cat "$TMP/template"
+  } > PKGFILE
 
-	msg "PKGFILE criado com sucesso."
-	msg "Entre no diretório com: cd ${DIRPKGFILE} "
-	msg "Revisão manual obrigatória."
-	exit 0
+  chmod +x PKGFILE
+
+  # Copia INSTALL se existir
+  if (( HAS_INSTALL )); then
+    cp "$TMP/INSTALL" INSTALL
+    chmod +x INSTALL
+    msg "INSTALL importado."
+  fi
+
+  cd - >/dev/null || true
+  rm -rf "$TMP"
+
+  msg "PKGFILE criado com sucesso."
+  (( HAS_INSTALL )) && msg "INSTALL criado com sucesso."
+  msg "Entre no diretório com: cd ${DIRPKGFILE}"
+  msg "Revisão manual obrigatória."
+  exit 0
 }
 
 parse_config() {
@@ -371,6 +402,17 @@ validate_config() {
 			find_privkey || die "SIGNPKG=1, mas nenhuma chave privada encontrada"
 		fi
 	fi
+
+   # Contrato de build
+   if (( ! HAS_BUILD && ! HAS_BUILD_STYLE )); then
+      die "função build() ausente e nenhum build_style definido"
+   fi
+
+   # Contrato de instalação
+   if (( ! HAS_PACKAGE && ! HAS_BUILD_STYLE )); then
+      die "função package() ausente e nenhum build_style definido"
+   fi
+
 }
 
 validate_pkgdest_sanity() {
@@ -397,6 +439,10 @@ die() {
 }
 msg() { echo -e "${cyan}==> $*${reset}"; }
 warn() { echo -e "${yellow}==> aviso: $*${reset}" >&2; }
+msg_error() {
+   printf "${red}ERROR: %s\n" "$*" >&2
+   exit 1
+}
 
 print_config() {
 	cat <<EOF
@@ -465,6 +511,11 @@ normalize_deps() {
 }
 
 load_pkgfile() {
+   [[ -f PKGFILE ]] || die "PKGFILE não encontrado"
+   source ./PKGFILE
+}
+
+load_pkgfileOLD() {
 	[[ -f PKGFILE ]] || die "PKGFILE não encontrado"
 	source ./PKGFILE
 
@@ -483,12 +534,15 @@ load_pkgfile() {
 }
 
 lint() {
-	declare -f package >/dev/null || die "função package() ausente"
+  # aceita build_style no lugar de package()
+  if ! declare -f package >/dev/null && [[ -z "${build_style:-}" ]]; then
+    die "função package() ausente"
+  fi
 
-	# Detecta PKGFILE que apaga o source (incompatível com pkgmake)
-	if grep -Eq 'rm[[:space:]]+-rf[[:space:]]+(\$|\$\{)(_pkgsrc|srcdir|pkgbase)|rm[[:space:]]+-rf[[:space:]]+["'\'']?\$\{?pkgbase\}?-\$\{?pkgver\}?' PKGFILE; then
-		die "PKGFILE inválido: não use 'rm -rf' no diretório de source (incompatível com pkgmake)"
-	fi
+  # Detecta PKGFILE que apaga o source (incompatível com pkgmake)
+  if grep -Eq 'rm[[:space:]]+-rf[[:space:]]+(\$|\$\{)(_pkgsrc|srcdir|pkgbase)|rm[[:space:]]+-rf[[:space:]]+["'"'"']?\$\{?pkgbase\}?-\$\{?pkgver\}?' PKGFILE; then
+    die "PKGFILE inválido: não use 'rm -rf' no diretório de source (incompatível com pkgmake)"
+  fi
 }
 
 strip_dep_op() {
@@ -626,6 +680,7 @@ detect_src() {
 
 	export srcdir="$SRCDIR"
 	export _pkgsrc="$d"
+	export wrksrc="$d"
 
 	# compatibilidade total: Arch (pkgdir) == Void (DESTDIR)
 	export pkgdir="$PKGDIR"
@@ -672,18 +727,37 @@ run_all() {
 		prepare
 	fi
 
-	if declare -f build >/dev/null; then
-		msg "Build"
-		build
-	fi
+   # Build
+   if declare -f build >/dev/null; then
+     build
+   elif [[ -n "${build_style:-}" ]]; then
+     do_build_style
+   else
+     die "função build() ausente"
+   fi
 
 	msg "Package"
-
 	# staging único e seguro (Arch + Void)
 	mkdir -p "$DESTDIR"
 	[[ -n "$DESTDIR" && "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
 
-	package
+   if declare -f pre_install >/dev/null; then
+      pre_install
+   fi
+
+   # Package / Install
+   if declare -f package >/dev/null; then
+     package
+   elif [[ -n "${build_style:-}" ]]; then
+     do_install_style
+   else
+     die "função package() ausente"
+   fi
+
+   # Post_install
+   if declare -f post_install >/dev/null; then
+      post_install
+   fi
 
 	#   for d in "${depends[@]}"; do
 	#    pkg="${d%%[<>=]*}"
@@ -693,6 +767,11 @@ run_all() {
 	# depends já é array aqui (graças ao normalize_deps)
 	deps_list="${depends[*]}"
 
+   INSTALL_OPT=""
+   if [[ -f "$WORKDIR/INSTALL" ]]; then
+     INSTALL_OPT="-S $PKGDIR/INSTALL"
+   fi
+
 	msg "Create XBPS"
 	cmd_run xbps-create \
 		-A "$ARCH" \
@@ -700,6 +779,7 @@ run_all() {
 		-s "$pkgdesc" \
 		-l "$license" \
 		-D "$deps_list" \
+       "${INSTALL_OPT}" \
 		"$pkgdir"
 
 	PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
@@ -722,7 +802,64 @@ run_all() {
 		msg "Install with:"
 		msg "  sudo xbps-install -R $PKGDEST -S ${pkgname}"
 	fi
+}
 
+# dispatcher mínimo para build_style
+do_build_style() {
+  case "$build_style" in
+    gnu-configure)
+      do_build_gnu_configure
+      ;;
+    *)
+      die "build_style não suportado: $build_style"
+      ;;
+  esac
+}
+
+vlicense() {
+  local f
+
+  for f in "$@"; do
+    if [ ! -f "$f" ]; then
+      msg_error "$pkgname: license file '$f' does not exist\n"
+    fi
+
+    install -Dm644 "$f" \
+      "$DESTDIR/usr/share/licenses/$pkgname/$(basename "$f")"
+  done
+}
+
+do_install_style() {
+  case "$build_style" in
+    gnu-configure)
+      do_install_gnu_configure
+      ;;
+    *)
+      die "build_style não suportado: $build_style"
+      ;;
+  esac
+}
+
+do_build_gnu_configure() {
+  : "${configure_args:=}"
+  : "${make_cmd_args:=}"
+
+  cd "$wrksrc" || die "não foi possível entrar em Swrksrc"
+
+  ./configure \
+    --prefix=/usr \
+    --sysconfdir=/etc \
+    --libdir=/usr/lib \
+    --mandir=/usr/share/man \
+    --infodir=/usr/share/info \
+    $configure_args
+
+  make $make_cmd_args
+}
+
+do_install_gnu_configure() {
+  cd "$wrksrc" || die "não foi possível entrar em Swrksrc"
+  make DESTDIR="$PKGDEST" install
 }
 
 clean() {
@@ -830,20 +967,32 @@ sign_only() {
 }
 
 resolve_fns() {
-	# prepare
-	if ! declare -f prepare >/dev/null && declare -f do_prepare >/dev/null; then
-		prepare() { do_prepare "$@"; }
-	fi
+  # prepare
+  if ! declare -f prepare >/dev/null && declare -f do_prepare >/dev/null; then
+    prepare() { do_prepare "$@"; }
+  fi
 
-	# build
-	if ! declare -f build >/dev/null && declare -f do_build >/dev/null; then
-		build() { do_build "$@"; }
-	fi
+  # build
+  if ! declare -f build >/dev/null && declare -f do_build >/dev/null; then
+    build() { do_build "$@"; }
+  fi
 
-	# package / install
-	if ! declare -f package >/dev/null && declare -f do_install >/dev/null; then
-		package() { do_install "$@"; }
-	fi
+  # package / install
+  if ! declare -f package >/dev/null && declare -f do_install >/dev/null; then
+    package() { do_install "$@"; }
+  fi
+
+  # ---- estado final (para validação e execução) ----
+  HAS_PREPARE=0
+  HAS_BUILD=0
+  HAS_PACKAGE=0
+  HAS_BUILD_STYLE=0
+
+  declare -f prepare >/dev/null && HAS_PREPARE=1
+  declare -f build   >/dev/null && HAS_BUILD=1
+  declare -f package >/dev/null && HAS_PACKAGE=1
+
+  [[ -n "$build_style" ]] && HAS_BUILD_STYLE=1
 }
 
 resolve_pkgdest() {
@@ -904,6 +1053,55 @@ resolve_verbose() {
 		die "VERBOSE inválido (use 0 ou 1): $VERBOSE"
 		;;
 	esac
+}
+
+resolve_sources() {
+	HAS_GIT_SOURCE=0
+
+	for s in "${source[@]}"; do
+		[[ "$s" == *git+* ]] && HAS_GIT_SOURCE=1 || true
+	done
+}
+
+sanitize_pkgfile_vars() {
+  # ---- nome do pacote ----
+  : "${pkgname:?pkgname não definido no PKGFILE}"
+  pkgbase="${pkgbase:-$pkgname}"
+
+  # ---- versão / revisão (Void → Arch) ----
+  if [[ -z "${pkgver:-}" && -n "${version:-}" ]]; then
+    pkgver="$version"
+  fi
+
+  if [[ -z "${pkgrel:-}" && -n "${revision:-}" ]]; then
+    pkgrel="$revision"
+  fi
+
+  : "${pkgver:=}"
+  : "${pkgrel:=}"
+
+  # ---- descrição (Void → Arch) ----
+  if [[ -z "${pkgdesc:-}" && -n "${short_desc:-}" ]]; then
+    pkgdesc="$short_desc"
+  fi
+  : "${pkgdesc:=}"
+
+  # ---- source / distfiles (Void → Arch) ----
+  if [[ -z "${source:-}" && -n "${distfiles:-}" ]]; then
+    source="$distfiles"
+  fi
+
+  # garantir array
+  if [[ -z "${source:-}" ]]; then
+    source=()
+  elif [[ "$(declare -p source 2>/dev/null)" != "declare -a"* ]]; then
+    source=("$source")
+  fi
+
+  # ---- arrays canônicos ----
+  : "${depends:=()}"
+  : "${makedepends:=()}"
+  : "${license:=()}"
 }
 
 if [[ "$1" == "new" ]]; then
@@ -976,6 +1174,8 @@ resolve_signpkg
 resolve_verbose
 resolve_pkgdest # blindagem de path + permissão (ANTES de tudo)
 load_pkgfile
+sanitize_pkgfile_vars
+resolve_sources
 normalize_deps
 normalize_dep_patterns
 resolve_fns
