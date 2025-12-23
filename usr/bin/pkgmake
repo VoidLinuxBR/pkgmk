@@ -72,6 +72,7 @@ DEBIAN_SITE="https://deb.debian.org/debian"
 # Colors: prefer tput, fallback to ANSI
 if command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
 	reset="$(tput sgr0)"
+	rst="$(tput sgr0)"
 	bold="$(tput bold)"
 
 	black="$(tput setaf 0)"
@@ -85,6 +86,7 @@ if command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
 else
 	# ANSI colors
 	reset='\033[0m'
+	rst='\033[0m'
 	black='\033[0;30m'
 	red='\033[0;31m'
 	green='\033[0;32m'
@@ -170,7 +172,7 @@ from_skeleton() {
 	local PKGNAME="$1"
 	local DIRPKGFILE="$2"
 
-	mkdir -p "${DIRPKGFILE}/files" || die "não foi possível criar diretório '${DIRPKGFILE} '"
+	mkdir -p "${DIRPKGFILE}" || die "não foi possível criar diretório '${DIRPKGFILE} '"
 	cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE} '"
 
 	cat >PKGFILE <<EOF
@@ -209,7 +211,6 @@ EOF
 	cd - >/dev/null || true
 
 	msg "PKGFILE criado com sucesso."
-	msg "Diretório '${DIRPKGFILE}/files' criado para patches ou arquivos auxiliares."
 	msg "Entre no diretório com: cd $DIRPKGFILE"
 	msg "Revisão manual obrigatória."
 }
@@ -264,7 +265,7 @@ from_arch() {
 	local PKGNAME="$1"
 	local DIRPKGFILE="$2"
 
-	mkdir -p "${DIRPKGFILE}/files"
+	mkdir -p "${DIRPKGFILE}"
 	cd "${DIRPKGFILE}"
 
 	msg "Fetch PKGBUILD from Arch/AUR"
@@ -405,10 +406,10 @@ validate_config() {
 		fi
 	fi
 
-#	# Contrato de build
-#	if ((!HAS_BUILD && !HAS_BUILD_STYLE)); then
-#		die "função build() ausente e nenhum build_style definido"
-#	fi
+	#	# Contrato de build
+	#	if ((!HAS_BUILD && !HAS_BUILD_STYLE)); then
+	#		die "função build() ausente e nenhum build_style definido"
+	#	fi
 
 	# Contrato de instalação
 	if ((!HAS_PACKAGE && !HAS_BUILD_STYLE)); then
@@ -607,12 +608,12 @@ fetch() {
 			if [[ -d "$name/.git" ]]; then
 				msg "Usando repositório git existente: $name"
 			else
+				msg "Fetching: ${yellow}$s${rst}"
 				cmd_run git clone "$repo" "$name" || die "falha ao clonar $repo"
 			fi
 
 			if [[ -n "$tag" ]]; then
-				cmd_run git -C "$name" checkout "$tag" ||
-					die "falha ao fazer checkout do tag $tag"
+				cmd_run git -C "$name" checkout "$tag" || die "falha ao fazer checkout do tag $tag"
 			fi
 			;;
 		http://* | https://*)
@@ -620,7 +621,7 @@ fetch() {
 			if [[ -f "$f" ]]; then
 				msg "Source já existe, usando cache: $f"
 			else
-				msg "Fetching: $s"
+				msg "Fetching: ${yellow}$s${rst}"
 				if ! curl -fL --output "./$f" -- "$s"; then
 					case "$f" in
 					*.asc | *.sig)
@@ -740,7 +741,7 @@ run_all() {
 	elif [[ -n "${build_style:-}" ]]; then
 		do_build_style
 	else
-      :  # build é opcional
+		: # build é opcional
 	fi
 
 	# staging único e seguro (Arch + Void)
@@ -775,10 +776,10 @@ run_all() {
 	fi
 
 	# Post_install
-   if pkg_has_fn post_install; then
-      msg "Package (post-install)"
-      post_install
-   fi
+	if pkg_has_fn post_install; then
+		msg "Package (post-install)"
+		post_install
+	fi
 
 	#   for d in "${depends[@]}"; do
 	#    pkg="${d%%[<>=]*}"
@@ -788,10 +789,10 @@ run_all() {
 	# depends já é array aqui (graças ao normalize_deps)
 	deps_list="${depends[*]}"
 
-   INSTALL_OPTS=()
-   if [[ -f "$WORKDIR/INSTALL" ]]; then
-     INSTALL_OPTS+=(-S "$WORKDIR/INSTALL")
-   fi
+	INSTALL_OPTS=()
+	if [[ -f "$WORKDIR/INSTALL" ]]; then
+		INSTALL_OPTS+=(-S "$WORKDIR/INSTALL")
+	fi
 
 	msg "Create XBPS"
 	cmd_run xbps-create \
@@ -800,7 +801,7 @@ run_all() {
 		-s "$pkgdesc" \
 		-l "$license" \
 		-D "$deps_list" \
-      "${INSTALL_OPTS[@]}" \
+		"${INSTALL_OPTS[@]}" \
 		"$pkgdir"
 
 	PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
@@ -820,8 +821,7 @@ run_all() {
 			sudo xbps-install -R "$PKGDEST" -S "$pkgname"
 		fi
 	else
-		msg "Install with:"
-		msg "  sudo xbps-install -R $PKGDEST -S ${pkgname}"
+		msg "Install with: ${yellow}sudo xbps-install -R $PKGDEST -S ${pkgname}${rst}"
 	fi
 }
 
@@ -841,13 +841,13 @@ do_build_style() {
 # HELPERS PARA VOID
 ################################################################################################################
 vsconf() {
-   local f="$1"
+	local f="$1"
 
-   [[ -f "$f" ]] || die "vsconf: arquivo '$f' não encontrado"
-   install -Dm644 "$f" "$DESTDIR/etc/$(basename "$f")"
+	[[ -f "$f" ]] || die "vsconf: arquivo '$f' não encontrado"
+	install -Dm644 "$f" "$DESTDIR/etc/$(basename "$f")"
 
-   # registra como conffile
-   conf_files+=" /etc/$(basename "$f")"
+	# registra como conffile
+	conf_files+=" /etc/$(basename "$f")"
 }
 
 vlicense() {
@@ -935,7 +935,6 @@ ${bold}Exemplos:${reset}
   pkgmake --sign-only --privkey minha-chave.pem
   pkgmake -q
   pkgmake new nano
-
 "
 }
 
@@ -1207,16 +1206,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 parse_config
-resolve_syncdeps
-resolve_signpkg
-resolve_verbose
-resolve_pkgdest # blindagem de path + permissão (ANTES de tudo)
-load_pkgfile
-sanitize_pkgfile_vars
-resolve_sources
-normalize_deps
-normalize_dep_patterns
-resolve_fns
-validate_config # validação FINAL, com tudo resolvido
-sync_deps
+if ! ((SIGN_ONLY)); then
+	resolve_syncdeps
+	resolve_signpkg
+	resolve_verbose
+	resolve_pkgdest # blindagem de path + permissão (ANTES de tudo)
+	load_pkgfile
+	sanitize_pkgfile_vars
+	resolve_sources
+	normalize_deps
+	normalize_dep_patterns
+	resolve_fns
+	validate_config # validação FINAL, com tudo resolvido
+	sync_deps
+fi
 run_all
