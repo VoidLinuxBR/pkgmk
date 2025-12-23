@@ -142,14 +142,16 @@ Na prática:
 - Um **PKGBUILD do Arch** pode ser adaptado facilmente para um **PKGFILE**
 - Um **template do Void Linux** pode ser usado quase sem modificações
 
-Campos comuns:
+Alguns campos comuns:
 - pkgname
 - version
 - revision
 - short_desc
 - license
 - homepage
+- url
 - distfiles
+- source
 - checksum
 - depends
 - makedepends
@@ -161,19 +163,73 @@ Funções reconhecidas:
 
 EXEMPLO RÁPIDO
 --------------
-```sh
-pkgname=hello
-version=1.0
-revision=1
+Exemplo de **PKGFILE simples**, com download de source via URL.
+
+```bash
+#!/usr/bin/env bash
+# Maintainer: Vilmar Catafesta <vcatafesta@chililinux.com>
+
+pkgname=htop
+pkgver=3.4.1
+pkgrel=1
+pkgdesc="Interactive process viewer"
+license="GPL-2.0"
+depends="ncurses"
+makedepends="autoconf automake libtool pkg-config make gcc ncurses-devel"
+source=("https://github.com/htop-dev/htop/archive/${pkgver}.tar.gz")
+
+prepare() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  autoreconf -fi
+}
 
 build() {
-    make
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  ./configure --prefix=/usr
+  make
 }
 
 package() {
-    make DESTDIR="$PKGDIR" install
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  make DESTDIR="$pkgdir" install
 }
 ```
+
+Outro exemplo:
+
+```bash
+#!/usr/bin/env bash
+# Maintainer: Vilmar Catafesta <vcatafesta@gmail.com>
+
+pkgname=chili-utils
+pkgdesc="Pacote de utilitários para GNU/Linux"
+pkgver=$(date +%Y%m%d)
+pkgrel=$(date +%H%M)
+arch=('any')
+license=('MIT')
+url="https://github.com/chililinux/${pkgname}"
+source=("git+${url}.git")
+md5sums=('SKIP')
+depends=()
+optdepends=()
+
+package() {
+   local dirs=("usr" "etc" "opt")
+
+   for dir in "${dirs[@]}"; do
+      if [ -d "${_pkgsrc}/${dir}" ]; then
+         cp -a "${_pkgsrc}/${dir}" "$DESTDIR/"
+      fi
+   done
+}
+```
+
+Nestes exemplos:
+- o source é baixado automaticamente via `source` tarball ou git
+- `${pkgname}` e `${version}` podem ser reutilizados na URL
+- `checksum` pode ser definido como hash real ou `SKIP` durante testes
+- o fluxo segue o mesmo modelo do **PKGBUILD (Arch)** e do **template do Void Linux**
+
 ---
 
 REQUISITOS
