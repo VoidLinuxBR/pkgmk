@@ -127,9 +127,20 @@ O pkgmake carrega automaticamente:
 Valores definidos via **linha de comando sobrescrevem**
 o arquivo de configuração.
 
+---
+
 ARQUIVO PKGFILE
 ---------------
-O **PKGFILE** é um script shell simples.
+O **PKGFILE** é um script shell simples, inspirado diretamente no
+**PKGBUILD do Arch Linux** e compatível com o **template de pacotes do Void Linux**.
+
+A sintaxe, os campos e a estrutura seguem o padrão tradicional usado por
+sistemas de empacotamento baseados em shell, permitindo reaproveitamento
+e adaptação de receitas existentes com o mínimo de ajustes.
+
+Na prática:
+- Um **PKGBUILD do Arch** pode ser adaptado facilmente para um **PKGFILE**
+- Um **template do Void Linux** pode ser usado quase sem modificações
 
 Campos comuns:
 - pkgname
@@ -163,6 +174,7 @@ package() {
     make DESTDIR="$PKGDIR" install
 }
 ```
+---
 
 REQUISITOS
 ----------
