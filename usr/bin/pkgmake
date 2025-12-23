@@ -84,11 +84,9 @@ validate_pkgname() {
 	local name="$1"
 
 	[[ -z "$name" ]] && return 1
-
 	if [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
 		return 1
 	fi
-
 	return 0
 }
 
@@ -96,7 +94,7 @@ pkgmake_new() {
 	# pkgmake new — create PKGFILE skeleton or import from Arch/Void
 	local PKGNAME=""
 	local MODE="skeleton"
-
+   local DIRPKGFILE='local'
 	# -------- argumentos --------
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
@@ -128,21 +126,23 @@ pkgmake_new() {
 	validate_pkgname "$PKGNAME" ||
 		die "nome de pacote inválido: '$PKGNAME' (use apenas letras, números, '.', '_' ou '-')"
 
-	[[ -e "$PKGNAME" ]] &&
-		die "diretório '$PKGNAME' já existe"
+	[[ "$MODE" != "skeleton" ]] && DIRPKGFILE="$MODE"
+   DIRPKGFILE+="-${PKGNAME}"
+	[[ -e "${DIRPKGFILE}" ]] &&
+		die "diretório '$DIRPKGFILE' já existe"
 
 	case "$MODE" in
 	arch)
-		from_arch "$PKGNAME"
+		from_arch "$PKGNAME" "${DIRPKGFILE}"
 		;;
 	voidlinuxbr)
-		from_voidlinuxbr "$PKGNAME"
+		from_voidlinuxbr "$PKGNAME" "${DIRPKGFILE}"
 		;;
 	void)
-		from_void "$PKGNAME"
+		from_void "$PKGNAME" "${DIRPKGFILE}"
 		;;
 	skeleton)
-		from_skeleton "$PKGNAME"
+		from_skeleton "$PKGNAME" "${DIRPKGFILE}"
 		;;
 	*)
 		die "modo interno inválido"
@@ -152,9 +152,10 @@ pkgmake_new() {
 
 from_skeleton() {
 	local PKGNAME="$1"
+	local DIRPKGFILE="$2"
 
-	mkdir -p "$PKGNAME/files" || die "não foi possível criar diretório '$PKGNAME'"
-	cd "$PKGNAME" || die "não foi possível entrar no diretório '$PKGNAME'"
+	mkdir -p "${DIRPKGFILE}/files" || die "não foi possível criar diretório '${DIRPKGFILE} '"
+	cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE} '"
 
 	cat >PKGFILE <<EOF
 #!/usr/bin/env bash
@@ -192,13 +193,14 @@ EOF
 	cd - >/dev/null || true
 
 	msg "PKGFILE criado com sucesso."
-	msg "Diretório '$PKGNAME/files' criado para patches ou arquivos auxiliares."
-	msg "Entre no diretório com: cd $PKGNAME"
+	msg "Diretório '${DIRPKGFILE}/files' criado para patches ou arquivos auxiliares."
+	msg "Entre no diretório com: cd $DIRPKGFILE"
 	msg "Revisão manual obrigatória."
 }
 
 from_voidlinuxbr() {
 	local PKGNAME="$1"
+	local DIRPKGFILE="$2"
 	local REPO_URL="https://raw.githubusercontent.com/voidlinuxbr/pkgmake/main"
 	local TMP
 	TMP="$(mktemp -d)"
@@ -222,8 +224,8 @@ from_voidlinuxbr() {
 	fi
 
 	# Cria diretório do pacote
-	mkdir -p "$PKGNAME"
-	cd "$PKGNAME" || die "não foi possível entrar no diretório '$PKGNAME'"
+	mkdir -p "${DIRPKGFILE}"
+	cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE} '"
 
 	# Gera PKGFILE com aviso explícito
 	{
@@ -234,7 +236,7 @@ from_voidlinuxbr() {
 	rm -rf "$TMP"
 
 	msg "PKGFILE criado com sucesso."
-	msg "Entre no diretório com: cd $PKGNAME"
+	msg "Entre no diretório com: cd $DIRPKGFILE"
 	msg "Revisão manual obrigatória."
 }
 
@@ -244,8 +246,10 @@ from_voidlinuxbr() {
 # -------------------------------------------------------------------
 from_arch() {
 	local PKGNAME="$1"
-	mkdir -p "$PKGNAME/files"
-	cd "$PKGNAME"
+	local DIRPKGFILE="$2"
+
+	mkdir -p "${DIRPKGFILE}/files"
+	cd "${DIRPKGFILE}"
 
 	msg "Fetch PKGBUILD from Arch/AUR"
 
@@ -277,7 +281,7 @@ from_arch() {
 			"$TMP/PKGBUILD"
 	} >PKGFILE
 	msg "PKGFILE criado com sucesso."
-	msg "Entre no diretório com: cd $PKGNAME"
+	msg "Entre no diretório com: cd ${DIRPKGFILE} "
 	msg "Revisão manual obrigatória."
 	exit 0
 }
@@ -288,6 +292,7 @@ from_arch() {
 # -------------------------------------------------------------------
 from_void() {
 	local pkg="$1"
+	local DIRPKGFILE="$2"
 	local VOID_REPO="https://raw.githubusercontent.com/void-linux/void-packages/master"
 	local TMP
 	TMP="$(mktemp -d)"
@@ -313,8 +318,8 @@ from_void() {
 	fi
 
 	# Cria diretório do pacote
-	mkdir -p "$pkg"
-	cd "$pkg" || die "não foi possível entrar no diretório '$pkg'"
+	mkdir -p "${DIRPKGFILE}"
+	cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE} '"
 
 	# Gera PKGFILE com aviso explícito
 	{
@@ -330,7 +335,7 @@ from_void() {
 	rm -rf "$TMP"
 
 	msg "PKGFILE criado com sucesso."
-	msg "Entre no diretório com: cd $PKGNAME"
+	msg "Entre no diretório com: cd ${DIRPKGFILE} "
 	msg "Revisão manual obrigatória."
 	exit 0
 }
