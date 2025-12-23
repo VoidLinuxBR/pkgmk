@@ -109,8 +109,6 @@ Este método:
 - permite atualizações via `xbps-install -Su`
 - não requer scripts externos ou instalação manual
 
----
-
 ### 4. Execução manual do instalador (alternativa)
 
 ```sh
