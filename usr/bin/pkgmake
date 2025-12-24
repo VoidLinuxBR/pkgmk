@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 # shellcheck shell=bash disable=SC1091,SC2039,SC2166,SC2034
 #
-#  pkgmake — makepkg-like tool for XBPS
+#  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: ter 23 dez 2025 00:21:48 -03
+#  Updated: qua 24 dez 2025 00:10:36 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -79,8 +79,7 @@ if command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
 	reset="$(tput sgr0)"
 	rst="$(tput sgr0)"
 	bold="$(tput bold)"
-
-	black="$(tput setaf 0)"
+   black="$(tput bold)$(tput setaf 0)"
 	red="$(tput setaf 1)"
 	green="$(tput setaf 2)"
 	yellow="$(tput setaf 3)"
@@ -89,6 +88,7 @@ if command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
 	cyan="$(tput setaf 6)"
 	white="$(tput setaf 7)"
    pink="$(tput setaf 5)"
+   orange="$(tput setaf 202)"
 else
 	# ANSI colors
 	reset='\033[0m'
@@ -1182,7 +1182,10 @@ clean() {
 
 usage() {
 	printf "%b\n" \
-		"${bold_blue}pkgmake${reset} — utilitário de build para pacotes XBPS
+		"${bold}${blue}pkgmake${rst} — utilitário de build para pacotes Void XBPS
+  ${bold}${orange}Copyright (c) 2019-2025, ${rst}ChiliLinux Development Team ${yellow}<https://chililinux.com> <https://github.com/chililimux>
+  ${bold}${orange}Copyright (c) 2025-2025, ${rst}VoidLinuxBR Development Team ${yellow}<https://www.youtube.com/@voidlinuxbr <https://github.com/voidlinuxbr> <https://t.me/VoidLinuxBrasil>
+  ${bold}${orange}Copyright (c) 2019-2025, ${rst}Vilmar Catafesta ${yellow}<vcatafesta@gmail.com> <https://github.com/vcatafesta>${rst}
 
 ${bold}Uso:${reset}
   pkgmake [opções]
@@ -1204,8 +1207,9 @@ ${bold}Opções:${reset}
   ${green}new --from-arch ${yellow}<nome>${reset}         Importar PKGBUILD do Arch/AUR (requer revisão manual)
   ${green}new --from-voidlinuxbr ${yellow}<nome>${reset}  Importar template de pacote da Comunidade VoidLinuxBR (requer revisão manual)
   ${green}new --from-void ${yellow}<nome>${reset}         Importar template de pacote do Void Linux (requer revisão manual)
+  ${green}new --from-venom ${yellow}<nome>${reset}        Importar template de pacote do Venom Linux (requer revisão manual)
   ${green}-h${reset}, ${green}--help${reset}                     Mostrar este ajuda
-  ${green}-d${reset}, ${green}--debug${reset}                     Modo debug
+  ${green}-d${reset}, ${green}--debug${reset}                    Ativa modo debug
 
 ${bold}Exemplos:${reset}
   pkgmake
