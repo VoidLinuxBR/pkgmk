@@ -5,7 +5,7 @@
 #  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: qua 24 dez 2025 00:10:36 -04
+#  Updated: qua 24 dez 2025 14:39:02 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -81,6 +81,7 @@ CLI_PKGDEST=""
 REINDEX_FORCE="${REINDEX_FORCE:-0}"
 CLI_REINDEX=
 REINDEX_ONLY=0
+REINDEX_ALL=0
 
 # Sites globais (compatibilidade xbps-src)
 DEBIAN_SITE="https://deb.debian.org/debian"
@@ -636,20 +637,21 @@ msg_error() {
 
 print_config() {
 	cat <<EOF
+# /etc/pkgmake.conf	
 # pkgmake effective configuration
 
-PKGDEST=${PKGDEST:-"(default: ./repo)"}
-PACKAGER=${PACKAGER:-"(not set)"}
+PKGDEST=${cyan}${PKGDEST:-"(default: ./repo)"}${rst}
+PACKAGER=${cyan}${PACKAGER:-"(not set)"}${rst}
 
-SYNCDEPS=${SYNCDEPS:-0}
-CLEANUP=${CLEANUP:-0}
+SYNCDEPS=${red}${SYNCDEPS:-0}${rst}
+CLEANUP=${red}${CLEANUP:-0}${rst}
 
-SIGNPKG=${SIGNPKG:-0}
-PRIVKEY=${PRIVKEY:-"(auto-detect)"}
+SIGNPKG=${red}${SIGNPKG:-0}${rst}
+PRIVKEY=${cyan}${PRIVKEY:-"(auto-detect)"}${rst}
 
-REINDEX_FORCE=${REINDEX_FORCE:-1}
+REINDEX_FORCE=${red}${REINDEX_FORCE:-1}${rst}
 
-VERBOSE=${VERBOSE:-0}
+VERBOSE=${red}${VERBOSE:-0}${rst}
 EOF
 }
 
@@ -1170,12 +1172,13 @@ ${bold}Opções:${reset}
   ${green}-f${reset}, ${green}--force${reset}                      Forçar reinstalação do pacote
   ${green}-q${reset}, ${green}--quiet${reset}                      Silenciar saída dos comandos
   ${green}-v${reset}, ${green}--verbose${reset}                    Mostrar saída dos comandos
-      ${green}--sign${reset}                       Assinar pacote após o build
-      ${green}--sign-only${reset}                  Somente assinar e recriar o índice do repositório local
-      ${green}--privkey${reset} ${yellow}<path>${reset}             Caminho da chave privada PEM (autodetecta se omitido)
       ${green}--gen-key${reset}                    Gerar chave RSA 4096 em formato PEM
-      ${green}--reindex${reset}                    Recria o índice do repositório local após o build
-      ${green}--reindex-only${reset}               Somente recriar o índice do repositório local
+      ${green}--privkey${reset} ${yellow}<path>${reset}             Caminho da chave privada PEM (autodetecta se omitido)
+      ${green}--sign${reset}                       Assinar o pacote recém-construído após o build
+      ${green}--sign-only${reset}                  Assinar pacotes do repositório local (sem build)
+      ${green}--reindex${reset}                    Atualizar o índice do repositório local após o build
+      ${green}--reindex-only${reset}               Recriar o índice do repositório local e sair
+      ${green}--reindex-all${reset}                Assinar todos os pacotes e recriar o índice do repositório local e sair
   ${green}-c|--clean${reset}                       Limpar diretórios de trabalho
   ${green}-p|--print-config${reset}                Imprimir configuracao do /etc/pkgmake.conf
   ${green}-k|--pkgdest${reset} ${yellow}<path>${reset}              Diretório local onde os pacotes (.xbps) e o repodata serão gerados
@@ -1548,6 +1551,10 @@ while [[ $# -gt 0 ]]; do
 		REINDEX_ONLY=1
 		shift
 		;;
+	--reindex-all)
+		REINDEX_ALL=1
+		shift
+		;;
 	--privkey)
 		PRIVKEY="$2"
 		shift 2
@@ -1557,6 +1564,7 @@ while [[ $# -gt 0 ]]; do
 		exit 0
 		;;
 	-p | --print-config)
+	   parse_config
 		print_config
 		exit 0
 		;;
@@ -1579,6 +1587,14 @@ done
 
 parse_config
 resolve_reindex
+
+if ((REINDEX_ALL)) ; then
+	REINDEX_FORCE=1
+	SIGN_ONLY=1
+	sign_only
+	create_repodata
+	exit 0
+fi
 
 if ((REINDEX_ONLY)) ; then
 	REINDEX_FORCE=1
