@@ -58,19 +58,29 @@ ARCH="$(uname -m)"
 
 SYNCDEPS=0
 CLI_SYNCDEPS=""
+
 INSTALLPKG=0
 FORCEPKG=0
 PRIVKEY=""
+
 SIGNPKG=0
 CLI_SIGNPKG=""
+
 SIGN_ONLY=0
+
 VERBOSE=0
 CLI_VERBOSE=""
+
 GEN_KEY=0
 KEY_FILE="privkey.pem"
 PRINTCONFIG=0
+
 PKGDEST=""
 CLI_PKGDEST=""
+
+REINDEX_FORCE="${REINDEX_FORCE:-0}"
+CLI_REINDEX=
+
 # Sites globais (compatibilidade xbps-src)
 DEBIAN_SITE="https://deb.debian.org/debian"
 
@@ -949,6 +959,8 @@ run_all() {
 		mkdir -p "$PKG"
 	fi
 
+	PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
+
 	# -------------------------------------------------
 	# Prepare
 	# -------------------------------------------------
@@ -991,7 +1003,7 @@ run_all() {
 	if [[ "${build_style:-}" == "venom" ]]; then
 		msg "Package step skipped (build_style=venom)"
 	elif pkg_has_fn package; then
-		msg "Package"
+		msg "Package ${pkgname}"
 		package
 	elif [[ -n "${build_style:-}" ]]; then
 		msg "Package (fakeroot)"
@@ -1022,7 +1034,7 @@ run_all() {
 	# -------------------------------------------------
 	# Create XBPS
 	# -------------------------------------------------
-	msg "Create XBPS"
+	msg "Create XBPS $PKGOUT"
 	cmd_run xbps-create \
 		-A "$ARCH" \
 		-n "${pkgname}-${pkgver}_${pkgrel}" \
@@ -1032,14 +1044,14 @@ run_all() {
 		"${INSTALL_OPTS[@]}" \
 		"$pkgdir"
 
-	PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
+	# mover pacote criado para o $PKGDEST
 	mv -f "$PKGOUT" "$PKGDEST/"
 
 	if ((SIGNPKG)); then
-		sign_only
+		sign_only "${PKGOUT}"
 	fi
 
-	create_repodata
+   create_repodata
 
 	if ((INSTALLPKG)); then
 		msg "Install package"
@@ -1167,6 +1179,7 @@ ${bold}Opções:${reset}
       ${green}--sign-only${reset}                  Somente assinar pacotes existentes no repo
       ${green}--privkey${reset} ${yellow}<path>${reset}             Caminho da chave privada PEM (autodetecta se omitido)
       ${green}--gen-key${reset}                    Gerar chave RSA 4096 em formato PEM
+      ${green}--reindex${reset}                    Recria completamente o índice do repositório local
   ${green}-c|--clean${reset}                       Limpar diretórios de trabalho
   ${green}-p|--print-config${reset}                Imprimir configuracao do /etc/pkgmake.conf
   ${green}-k|--pkgdest${reset} ${yellow}<path>${reset}              Diretório local onde os pacotes (.xbps) e o repodata serão gerados
@@ -1188,13 +1201,13 @@ ${bold}Exemplos:${reset}
 "
 }
 
-create_repodataOLD() {
+create_repodataOLD1() {
 	msg "Recreate repodata : $PKGDEST/x86_64-repodata"
 	cmd_run xbps-rindex -r "$PKGDEST"
 	cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
 }
 
-create_repodata() {
+create_repodataOLD2() {
 	msg "Recreate repodata (hard reset)"
 
 	# remove TODO estado antigo
@@ -1231,7 +1244,55 @@ create_repodata() {
 	fi
 }
 
-sign_only() {
+create_repodata() {
+   case "$REINDEX_FORCE" in
+      1)
+         msg "Recreate repodata (hard reset)"
+
+         # remove estado antigo do repo
+         rm -f "$PKGDEST"/*-repodata "$PKGDEST"/*-repodata.sig
+
+         # recria índice vazio
+         cmd_run xbps-rindex -r "$PKGDEST"
+         ;;
+      0)
+         msg "Update repodata (incremental)"
+         ;;
+      *)
+         die "REINDEX_FORCE inválido (use 0 ou 1): $REINDEX_FORCE"
+         ;;
+   esac
+
+   # adiciona pacotes UM A UM (igual xbps-src)
+#   local p
+#   for p in "$PKGDEST"/*.xbps; do
+#      [[ -f "$p" ]] || continue
+#      cmd_run xbps-rindex -a "$p" >/dev/null
+#   done
+
+#   cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
+   xbps-rindex -a "$PKGDEST/${PKGOUT}"
+
+   # assina o índice (se habilitado)
+   if [[ "$SIGNPKG" -eq 1 ]]; then
+      if [[ -n "$PRIVKEY" ]]; then
+         [[ -f "$PRIVKEY" ]] || die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
+      else
+         find_privkey || die "Nenhuma chave privada encontrada para assinatura"
+      fi
+
+      local signedby=()
+      [[ -n "$PACKAGER" ]] && signedby=(--signedby "$PACKAGER")
+
+      cmd_run xbps-rindex \
+         --sign \
+         "${signedby[@]}" \
+         --privkey "$PRIVKEY" \
+         "$PKGDEST" >/dev/null
+   fi
+}
+
+sign_onlyOLD() {
 	if [[ -n "$PRIVKEY" ]]; then
 		[[ ! -f "$PRIVKEY" ]] && die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
 	else
@@ -1249,6 +1310,44 @@ sign_only() {
 		rm -f "$pkg.sig2"
 		cmd_run xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$pkg"
 	done
+}
+
+sign_only() {
+   local PKGOUT="$1"
+
+   if [[ -n "$PRIVKEY" ]]; then
+      [[ ! -f "$PRIVKEY" ]] && die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
+   else
+      find_privkey || die "Nenhuma chave privada encontrada para assinatura"
+   fi
+
+   shopt -s nullglob
+
+   local pkgs
+   if (( REINDEX_FORCE )); then
+      # modo force: assina TODOS os pacotes
+      pkgs=("$PKGDEST"/*.xbps)
+   elif [[ -n "${PKGOUT}" ]]; then
+      # modo normal: assina só o pacote construido agora
+      pkgs=("$PKGDEST/${PKGOUT}")
+   else
+      # modo normal: assina só os que NÃO têm .sig2
+      pkgs=()
+      local p
+      for p in "$PKGDEST"/*.xbps; do
+         [[ -f "$p.sig2" ]] || pkgs+=("$p")
+      done
+   fi
+
+   shopt -u nullglob
+   [[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote para assinar em $PKGDEST"
+
+   for pkg in "${pkgs[@]}"; do
+echo $pkg
+      msg "Sign package: $(basename "$pkg")"
+      rm -f "$pkg.sig2"
+      cmd_run xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$pkg"
+   done
 }
 
 resolve_fns() {
@@ -1350,6 +1449,19 @@ resolve_sources() {
 	done
 }
 
+resolve_reindex() {
+   if [[ -n "$CLI_REINDEX" ]]; then
+      REINDEX_FORCE=1
+   fi
+
+   case "$REINDEX_FORCE" in
+      0 | 1) : ;;
+      *)
+         die "/etc/pkgmake.conf -> REINDEX_FORCE inválido (use 0 ou 1): $REINDEX_FORCE"
+         ;;
+   esac
+}
+
 sanitize_pkgfile_vars() {
 	# ---- nome do pacote ----
 	: "${pkgname:?pkgname não definido no PKGFILE}"
@@ -1432,6 +1544,10 @@ while [[ $# -gt 0 ]]; do
 		SIGN_ONLY=1
 		shift
 		;;
+	--reindex)
+      CLI_REINDEX=1
+		shift
+		;;
 	--privkey)
 		PRIVKEY="$2"
 		shift 2
@@ -1462,6 +1578,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 parse_config
+resolve_reindex
 if ! ((SIGN_ONLY)); then
 	resolve_syncdeps
 	resolve_signpkg
