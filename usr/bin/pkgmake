@@ -5,7 +5,7 @@
 #  pkgmake — makepkg-like tool for XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: ter 23 dez 2025 00:21:48 -03
+#  Updated: ter 23 dez 2025 23:00:31 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -692,6 +692,7 @@ normalize_depsOLD() {
 
 normalize_deps() {
 	local v
+
 	for v in depends makedepends; do
 		if declare -p "$v" &>/dev/null; then
 			# se não for array, converte string → array
@@ -709,7 +710,7 @@ normalize_deps() {
 
 load_pkgfile() {
 	# limpa possíveis funções herdadas do framework
-	unset -f package build prepare check install post_install pre_install 2>/dev/null || true
+	unset -f depends makedepends package build prepare check install post_install pre_install 2>/dev/null || true
 
 	[[ -f "PKGFILE" ]] || die "PKGFILE não encontrado"
 
@@ -1407,10 +1408,10 @@ sanitize_pkgfile_vars() {
 		source=("$source")
 	fi
 
-	# ---- arrays canônicos ----
-	: "${depends:=()}"
-	: "${makedepends:=()}"
-	: "${license:=()}"
+   # ---- arrays canônicos ----
+   declare -p depends &>/dev/null     || depends=()
+   declare -p makedepends &>/dev/null || makedepends=()
+   declare -p license &>/dev/null     || license=()
 }
 
 if [[ "$1" == "new" ]]; then
