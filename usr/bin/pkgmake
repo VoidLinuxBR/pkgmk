@@ -80,6 +80,7 @@ CLI_PKGDEST=""
 
 REINDEX_FORCE="${REINDEX_FORCE:-0}"
 CLI_REINDEX=
+REINDEX_ONLY=0
 
 # Sites globais (compatibilidade xbps-src)
 DEBIAN_SITE="https://deb.debian.org/debian"
@@ -89,7 +90,7 @@ if command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
 	reset="$(tput sgr0)"
 	rst="$(tput sgr0)"
 	bold="$(tput bold)"
-   black="$(tput bold)$(tput setaf 0)"
+	black="$(tput bold)$(tput setaf 0)"
 	red="$(tput setaf 1)"
 	green="$(tput setaf 2)"
 	yellow="$(tput setaf 3)"
@@ -97,8 +98,8 @@ if command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
 	magenta="$(tput setaf 5)"
 	cyan="$(tput setaf 6)"
 	white="$(tput setaf 7)"
-   pink="$(tput setaf 5)"
-   orange="$(tput setaf 202)"
+	pink="$(tput setaf 5)"
+	orange="$(tput setaf 202)"
 else
 	# ANSI colors
 	reset='\033[0m'
@@ -112,7 +113,7 @@ else
 	cyan='\033[0;36m'
 	white='\033[0;37m'
 	bold='\033[1m'
-   pink='\033[95m'
+	pink='\033[95m'
 fi
 
 validate_pkgname() {
@@ -554,7 +555,7 @@ parse_config() {
 	[[ -f /etc/pkgmake.conf ]] && source /etc/pkgmake.conf
 	ret=$?
 	set -e
-	((ret == 0)) || die "erro ao carregar PKGFILE"
+	((ret == 0)) || die "erro ao carregar /etc/pkgmake.conf"
 }
 
 validate_config() {
@@ -580,26 +581,26 @@ validate_config() {
 		fi
 	fi
 
-   # ---------------------------------------------
-   # Contrato de build / install
-   # ---------------------------------------------
+	# ---------------------------------------------
+	# Contrato de build / install
+	# ---------------------------------------------
 
-   if [[ "${build_style:-}" == "venom" ]]; then
-      # venom exige build()
-      ((HAS_BUILD)) || die "função build() ausente (build_style=venom)"
+	if [[ "${build_style:-}" == "venom" ]]; then
+		# venom exige build()
+		((HAS_BUILD)) || die "função build() ausente (build_style=venom)"
 
-   else
-      # não-venom
-      if [[ -n "${build_style:-}" ]]; then
-         # build_style existe → pode não ter build nem package
-         : # válido
-      else
-         # sem build_style → precisa de build OU package
-         if ((!HAS_BUILD && !HAS_PACKAGE)); then
-            die "nenhuma função build() ou package() definida"
-         fi
-      fi
-   fi
+	else
+		# não-venom
+		if [[ -n "${build_style:-}" ]]; then
+			# build_style existe → pode não ter build nem package
+			: # válido
+		else
+			# sem build_style → precisa de build OU package
+			if ((!HAS_BUILD && !HAS_PACKAGE)); then
+				die "nenhuma função build() ou package() definida"
+			fi
+		fi
+	fi
 
 }
 
@@ -676,16 +677,16 @@ normalize_dep_patterns() {
 			dep="${arr[$i]}"
 
 			[[ -n "$dep" ]] || continue
-		   [[ "$dep" == "()" ]] && continue
+			[[ "$dep" == "()" ]] && continue
 
 			if ! [[ "$dep" =~ [\<\>\=] ]]; then
 				arr[$i]="${dep}>=0"
 			fi
 		done
 
-      # remove efetivamente os descartados
-      arr=("${arr[@]/()/}")
-      arr=("${arr[@]}")   # recompacta
+		# remove efetivamente os descartados
+		arr=("${arr[@]/()/}")
+		arr=("${arr[@]}") # recompacta
 	done
 }
 
@@ -729,18 +730,18 @@ pkg_has_fn() {
 }
 
 lint() {
-   # ---------------------------------------------
-   # build() / package() contract
-   # ---------------------------------------------
-   if [[ "${build_style:-}" == "venom" ]]; then
-      pkg_has_fn build || die "função build() ausente (build_style=venom)"
-   else
-      # sem venom:
-      # válido se existir build() OU package() OU build_style
-      if ! pkg_has_fn build && ! pkg_has_fn package && [[ -z "${build_style:-}" ]]; then
-         die "nenhuma função build() ou package() definida"
-      fi
-   fi
+	# ---------------------------------------------
+	# build() / package() contract
+	# ---------------------------------------------
+	if [[ "${build_style:-}" == "venom" ]]; then
+		pkg_has_fn build || die "função build() ausente (build_style=venom)"
+	else
+		# sem venom:
+		# válido se existir build() OU package() OU build_style
+		if ! pkg_has_fn build && ! pkg_has_fn package && [[ -z "${build_style:-}" ]]; then
+			die "nenhuma função build() ou package() definida"
+		fi
+	fi
 
 	# ---------------------------------------------
 	# package()
@@ -930,12 +931,6 @@ run_all() {
 		exit 0
 	fi
 
-	if ((SIGN_ONLY)); then
-		sign_only
-		create_repodata
-		exit 0
-	fi
-
 	msg "Lint"
 	lint
 
@@ -1051,7 +1046,7 @@ run_all() {
 		sign_only "${PKGOUT}"
 	fi
 
-   create_repodata
+	create_repodata
 
 	if ((INSTALLPKG)); then
 		msg "Install package"
@@ -1176,10 +1171,11 @@ ${bold}Opções:${reset}
   ${green}-q${reset}, ${green}--quiet${reset}                      Silenciar saída dos comandos
   ${green}-v${reset}, ${green}--verbose${reset}                    Mostrar saída dos comandos
       ${green}--sign${reset}                       Assinar pacote após o build
-      ${green}--sign-only${reset}                  Somente assinar pacotes existentes no repo
+      ${green}--sign-only${reset}                  Somente assinar e recriar o índice do repositório local
       ${green}--privkey${reset} ${yellow}<path>${reset}             Caminho da chave privada PEM (autodetecta se omitido)
       ${green}--gen-key${reset}                    Gerar chave RSA 4096 em formato PEM
-      ${green}--reindex${reset}                    Recria completamente o índice do repositório local
+      ${green}--reindex${reset}                    Recria o índice do repositório local após o build
+      ${green}--reindex-only${reset}               Somente recriar o índice do repositório local
   ${green}-c|--clean${reset}                       Limpar diretórios de trabalho
   ${green}-p|--print-config${reset}                Imprimir configuracao do /etc/pkgmake.conf
   ${green}-k|--pkgdest${reset} ${yellow}<path>${reset}              Diretório local onde os pacotes (.xbps) e o repodata serão gerados
@@ -1245,46 +1241,52 @@ create_repodataOLD2() {
 }
 
 create_repodata() {
-   case "$REINDEX_FORCE" in
-      1)
-         msg "Recreate repodata (hard reset)"
+	case "$REINDEX_FORCE" in
+	1)
+		msg "Recreate repodata (hard reset)"
 
-         # remove estado antigo do repo
-         rm -f "$PKGDEST"/*-repodata "$PKGDEST"/*-repodata.sig
+		# remove estado antigo do repo
+		rm -f "$PKGDEST"/*-repodata "$PKGDEST"/*-repodata.sig
 
-         # recria índice vazio
-         cmd_run xbps-rindex -r "$PKGDEST"
+		# recria índice vazio
+		cmd_run xbps-rindex -r "$PKGDEST"
 
-         #   cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
-         xbps-rindex -a "$PKGDEST/*.xbps"
-         ;;
-      0)
-         msg "Update repodata (incremental)"
-         #   cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
-         xbps-rindex -a "$PKGDEST/${PKGOUT}"
-         ;;
-      *)
-         die "REINDEX_FORCE inválido (use 0 ou 1): $REINDEX_FORCE"
-         ;;
-   esac
+		#      	# adiciona pacotes UM A UM (igual xbps-src)
+		#      	local p
+		#      	for p in "$PKGDEST"/*.xbps; do
+		#      		[[ -f "$p" ]] || continue
+		#      		cmd_run xbps-rindex -a "$p"
+		#      	done
 
-   # assina o índice (se habilitado)
-   if [[ "$SIGNPKG" -eq 1 ]]; then
-      if [[ -n "$PRIVKEY" ]]; then
-         [[ -f "$PRIVKEY" ]] || die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
-      else
-         find_privkey || die "Nenhuma chave privada encontrada para assinatura"
-      fi
+		shopt -s nullglob
+		cmd_run xbps-rindex -a $PKGDEST/*.xbps
+		;;
+	0)
+		msg "Update repodata (incremental)"
+		#   cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
+		cmd_run xbps-rindex -a "$PKGDEST/${PKGOUT}"
+		;;
+	*)
+		die "REINDEX_FORCE inválido (use 0 ou 1): $REINDEX_FORCE"
+		;;
+	esac
 
-      local signedby=()
-      [[ -n "$PACKAGER" ]] && signedby=(--signedby "$PACKAGER")
+	# assina o índice (se habilitado)
+	if [[ "$SIGNPKG" -eq 1 ]]; then
+		if [[ -n "$PRIVKEY" ]]; then
+			[[ -f "$PRIVKEY" ]] || die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
+		else
+			find_privkey || die "Nenhuma chave privada encontrada para assinatura"
+		fi
 
-      cmd_run xbps-rindex \
-         --sign \
-         "${signedby[@]}" \
-         --privkey "$PRIVKEY" \
-         "$PKGDEST" >/dev/null
-   fi
+		local signedby=()
+		[[ -n "$PACKAGER" ]] && signedby=(--signedby "$PACKAGER")
+		cmd_run xbps-rindex \
+			--sign \
+			"${signedby[@]}" \
+			--privkey "$PRIVKEY" \
+			"$PKGDEST"
+	fi
 }
 
 sign_onlyOLD() {
@@ -1308,40 +1310,40 @@ sign_onlyOLD() {
 }
 
 sign_only() {
-   local PKGOUT="$1"
+	local PKGOUT="$1"
 
-   if [[ -n "$PRIVKEY" ]]; then
-      [[ ! -f "$PRIVKEY" ]] && die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
-   else
-      find_privkey || die "Nenhuma chave privada encontrada para assinatura"
-   fi
+	if [[ -n "$PRIVKEY" ]]; then
+		[[ ! -f "$PRIVKEY" ]] && die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
+	else
+		find_privkey || die "Nenhuma chave privada encontrada para assinatura"
+	fi
 
-   shopt -s nullglob
+	shopt -s nullglob
 
-   local pkgs
-   if (( REINDEX_FORCE )); then
-      # modo force: assina TODOS os pacotes
-      pkgs=("$PKGDEST"/*.xbps)
-   elif [[ -n "${PKGOUT}" ]]; then
-      # modo normal: assina só o pacote construido agora
-      pkgs=("$PKGDEST/${PKGOUT}")
-   else
-      # modo normal: assina só os que NÃO têm .sig2
-      pkgs=()
-      local p
-      for p in "$PKGDEST"/*.xbps; do
-         [[ -f "$p.sig2" ]] || pkgs+=("$p")
-      done
-   fi
+	local pkgs
+	if ((REINDEX_FORCE)); then
+		# modo force: assina TODOS os pacotes
+		pkgs=("$PKGDEST"/*.xbps)
+	elif [[ -n "${PKGOUT}" ]]; then
+		# modo normal: assina só o pacote construido agora
+		pkgs=("$PKGDEST/${PKGOUT}")
+	else
+		# modo normal: assina só os que NÃO têm .sig2
+		pkgs=()
+		local p
+		for p in "$PKGDEST"/*.xbps; do
+			[[ -f "$p.sig2" ]] || pkgs+=("$p")
+		done
+	fi
 
-   shopt -u nullglob
-   [[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote para assinar em $PKGDEST"
+	shopt -u nullglob
+	[[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote sem assinar em $PKGDEST"
 
-   for pkg in "${pkgs[@]}"; do
-      msg "Sign package: $(basename "$pkg")"
-      rm -f "$pkg.sig2"
-      cmd_run xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$pkg"
-   done
+	for pkg in "${pkgs[@]}"; do
+		msg "Sign package: $(basename "$pkg")"
+		rm -f "$pkg.sig2"
+		cmd_run xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$pkg"
+	done
 }
 
 resolve_fns() {
@@ -1444,16 +1446,16 @@ resolve_sources() {
 }
 
 resolve_reindex() {
-   if [[ -n "$CLI_REINDEX" ]]; then
-      REINDEX_FORCE=1
-   fi
+	if [[ -n "$CLI_REINDEX" ]]; then
+		REINDEX_FORCE=1
+	fi
 
-   case "$REINDEX_FORCE" in
-      0 | 1) : ;;
-      *)
-         die "/etc/pkgmake.conf -> REINDEX_FORCE inválido (use 0 ou 1): $REINDEX_FORCE"
-         ;;
-   esac
+	case "$REINDEX_FORCE" in
+	0 | 1) : ;;
+	*)
+		die "/etc/pkgmake.conf -> REINDEX_FORCE inválido (use 0 ou 1): $REINDEX_FORCE"
+		;;
+	esac
 }
 
 sanitize_pkgfile_vars() {
@@ -1492,10 +1494,10 @@ sanitize_pkgfile_vars() {
 		source=("$source")
 	fi
 
-   # ---- arrays canônicos ----
-   declare -p depends &>/dev/null     || depends=()
-   declare -p makedepends &>/dev/null || makedepends=()
-   declare -p license &>/dev/null     || license=()
+	# ---- arrays canônicos ----
+	declare -p depends &>/dev/null || depends=()
+	declare -p makedepends &>/dev/null || makedepends=()
+	declare -p license &>/dev/null || license=()
 }
 
 if [[ "$1" == "new" ]]; then
@@ -1539,7 +1541,11 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	--reindex)
-      CLI_REINDEX=1
+		CLI_REINDEX=1
+		shift
+		;;
+	--reindex-only)
+		REINDEX_ONLY=1
 		shift
 		;;
 	--privkey)
@@ -1573,18 +1579,28 @@ done
 
 parse_config
 resolve_reindex
-if ! ((SIGN_ONLY)); then
-	resolve_syncdeps
-	resolve_signpkg
-	resolve_verbose
-	resolve_pkgdest # blindagem de path + permissão (ANTES de tudo)
-	load_pkgfile
-	sanitize_pkgfile_vars
-	resolve_sources
-	normalize_deps
-	normalize_dep_patterns
-	resolve_fns
-	validate_config # validação FINAL, com tudo resolvido
-	sync_deps
+
+if ((REINDEX_ONLY)) ; then
+	REINDEX_FORCE=1
+	create_repodata
+	exit 0
 fi
+
+if ((SIGN_ONLY)) ; then
+	sign_only
+	exit 0
+fi
+
+resolve_syncdeps
+resolve_signpkg
+resolve_verbose
+resolve_pkgdest # blindagem de path + permissão (ANTES de tudo)
+load_pkgfile
+sanitize_pkgfile_vars
+resolve_sources
+normalize_deps
+normalize_dep_patterns
+resolve_fns
+validate_config # validação FINAL, com tudo resolvido
+sync_deps
 run_all
