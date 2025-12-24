@@ -565,26 +565,27 @@ validate_config() {
 		fi
 	fi
 
-	# ---------------------------------------------
-	# Contrato de build
-	# ---------------------------------------------
-	# - obrigatório no modo padrão
-	# - obrigatório em build_style=venom
-	if [[ "${build_style:-}" == "venom" ]]; then
-		((HAS_BUILD)) || die "função build() ausente (build_style=venom)"
-	else
-		if ((!HAS_BUILD && !HAS_BUILD_STYLE)); then
-			die "função build() ausente e nenhum build_style definido"
-		fi
-	fi
+   # ---------------------------------------------
+   # Contrato de build / install
+   # ---------------------------------------------
 
-	# ---------------------------------------------
-	# Contrato de instalação
-	# ---------------------------------------------
-	# - obrigatório somente no modo padrão
-	if ((!HAS_PACKAGE && !HAS_BUILD_STYLE)); then
-		die "função package() ausente e nenhum build_style definido"
-	fi
+   if [[ "${build_style:-}" == "venom" ]]; then
+      # venom exige build()
+      ((HAS_BUILD)) || die "função build() ausente (build_style=venom)"
+
+   else
+      # não-venom
+      if [[ -n "${build_style:-}" ]]; then
+         # build_style existe → pode não ter build nem package
+         : # válido
+      else
+         # sem build_style → precisa de build OU package
+         if ((!HAS_BUILD && !HAS_PACKAGE)); then
+            die "nenhuma função build() ou package() definida"
+         fi
+      fi
+   fi
+
 }
 
 validate_pkgdest_sanity() {
@@ -729,18 +730,18 @@ pkg_has_fn() {
 }
 
 lint() {
-	# ---------------------------------------------
-	# build()
-	# ---------------------------------------------
-	# - obrigatório no modo padrão
-	# - obrigatório em build_style=venom
-	if [[ "${build_style:-}" == "venom" ]]; then
-		pkg_has_fn build || die "função build() ausente (build_style=venom)"
-	else
-		if ! pkg_has_fn build && [[ -z "${build_style:-}" ]]; then
-			die "função build() ausente"
-		fi
-	fi
+   # ---------------------------------------------
+   # build() / package() contract
+   # ---------------------------------------------
+   if [[ "${build_style:-}" == "venom" ]]; then
+      pkg_has_fn build || die "função build() ausente (build_style=venom)"
+   else
+      # sem venom:
+      # válido se existir build() OU package() OU build_style
+      if ! pkg_has_fn build && ! pkg_has_fn package && [[ -z "${build_style:-}" ]]; then
+         die "nenhuma função build() ou package() definida"
+      fi
+   fi
 
 	# ---------------------------------------------
 	# package()
