@@ -1,0 +1,59 @@
+# bash completion for pkgmake
+# estilo clássico, sem dependência de bash-completion
+
+_pkgmake() {
+   local cur prev
+   COMPREPLY=()
+
+   cur="${COMP_WORDS[COMP_CWORD]}"
+   prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+   # flags globais
+   local global_flags="
+      -d --debug
+      -h --help
+      -V --version
+      -v --verbose
+      -s --sign
+      -i --install
+      -f --force
+   "
+
+   # flags do comando new
+   local new_flags="
+      --from-arch
+      --from-void
+      --from-voidlinuxbr
+      --from-venom
+   "
+
+   # -------------------------------------------------
+   # primeiro argumento: pode ser 'new' ou flags
+   # -------------------------------------------------
+   if (( COMP_CWORD == 1 )); then
+      COMPREPLY=( $(compgen -W "new $global_flags" -- "$cur") )
+      return 0
+   fi
+
+   # -------------------------------------------------
+   # se o comando for 'new'
+   # -------------------------------------------------
+   if [[ "${COMP_WORDS[1]}" == "new" ]]; then
+      # segundo argumento: flags do new ou nome do pacote
+      if (( COMP_CWORD == 2 )); then
+         COMPREPLY=( $(compgen -W "$new_flags" -- "$cur") )
+         return 0
+      fi
+
+      # depois das flags, sugere nome de pacote livre
+      # (não tenta adivinhar)
+      return 0
+   fi
+
+   # -------------------------------------------------
+   # flags globais sempre disponíveis
+   # -------------------------------------------------
+   COMPREPLY+=( $(compgen -W "$global_flags" -- "$cur") )
+}
+
+complete -F _pkgmake pkgmake
