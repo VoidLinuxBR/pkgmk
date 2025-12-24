@@ -1419,10 +1419,10 @@ sanitize_pkgfile_vars() {
 		source=("$source")
 	fi
 
-	# ---- arrays canônicos ----
-	: "${depends:=()}"
-	: "${makedepends:=()}"
-	: "${license:=()}"
+   # ---- arrays canônicos ----
+   declare -p depends &>/dev/null     || depends=()
+   declare -p makedepends &>/dev/null || makedepends=()
+   declare -p license &>/dev/null     || license=()
 }
 
 if [[ "$1" == "new" ]]; then
