@@ -135,10 +135,13 @@ Opções:
   -f, --force                      Forçar reinstalação do pacote
   -q, --quiet                      Silenciar saída dos comandos
   -v, --verbose                    Mostrar saída dos comandos
-      --sign                       Assinar pacote após o build
-      --sign-only                  Somente assinar pacotes existentes no repo
-      --privkey <path>             Caminho da chave privada PEM (autodetecta se omitido)
       --gen-key                    Gerar chave RSA 4096 em formato PEM
+      --privkey <path>             Caminho da chave privada PEM (autodetecta se omitido)
+      --sign                       Assinar o pacote recém-construído após o build
+      --sign-only                  Assinar pacotes do repositório local (sem build)
+      --reindex                    Atualizar o índice do repositório local após o build
+      --reindex-only               Recriar o índice do repositório local e sair
+      --reindex-all                Assinar todos os pacotes e recriar o índice do repositório local e sair
   -c|--clean                       Limpar diretórios de trabalho
   -p|--print-config                Imprimir configuracao do /etc/pkgmake.conf
   -k|--pkgdest <path>              Diretório local onde os pacotes (.xbps) e o repodata serão gerados
