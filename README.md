@@ -121,29 +121,34 @@ sudo ./install.sh
 USO
 ---
 ```
-pkgmake — utilitário de build para pacotes XBPS
+pkgmake — utilitário de build para pacotes Void XBPS
+  Copyright (c) 2019-2025, ChiliLinux Development Team <https://chililinux.com> <https://github.com/chililimux>
+  Copyright (c) 2025-2025, VoidLinuxBR Development Team <https://www.youtube.com/@voidlinuxbr <https://github.com/voidlinuxbr> <https://t.me/VoidLinuxBrasil>
+  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com> <https://github.com/vcatafesta>
 
 Uso:
   pkgmake [opções]
 
 Opções:
-  -s, --syncdeps                 Instalar depends e makedepends
-  -i, --install                  Instalar pacote após o build
-  -f, --force                    Forçar reinstalação do pacote
-  -q, --quiet                    Silenciar saída dos comandos
-  -v, --verbose                  Mostrar saída dos comandos
-      --sign                     Assinar pacote após o build
-      --sign-only                Somente assinar pacotes existentes no repo
-      --privkey <path>           Caminho da chave privada PEM (autodetecta se omitido)
-      --gen-key                  Gerar chave RSA 4096 em formato PEM
-  -c|--clean                     Limpar diretórios de trabalho
-  -p|--print-config              Imprimir configuracao do /etc/pkgmake.conf
-  -k|--pkgdest <path>            Diretório local onde os pacotes (.xbps) e o repodata serão gerados
-  new <nome>                     Criar esqueleto básico de PKGFILE
-  new --from-arch <nome>         Importar PKGBUILD do Arch/AUR (requer revisão manual)
-  new --from-voidlinuxbr <nome>  Importar template de pacote da Comunidade VoidLinuxBR (requer revisão manual)
-  new --from-void <nome>         Importar template de pacote do Void Linux (requer revisão manual)
-  -h, --help                     Mostrar este ajuda
+  -s, --syncdeps                   Instalar depends e makedepends
+  -i, --install                    Instalar pacote após o build
+  -f, --force                      Forçar reinstalação do pacote
+  -q, --quiet                      Silenciar saída dos comandos
+  -v, --verbose                    Mostrar saída dos comandos
+      --sign                       Assinar pacote após o build
+      --sign-only                  Somente assinar pacotes existentes no repo
+      --privkey <path>             Caminho da chave privada PEM (autodetecta se omitido)
+      --gen-key                    Gerar chave RSA 4096 em formato PEM
+  -c|--clean                       Limpar diretórios de trabalho
+  -p|--print-config                Imprimir configuracao do /etc/pkgmake.conf
+  -k|--pkgdest <path>              Diretório local onde os pacotes (.xbps) e o repodata serão gerados
+  new <pacote>                     Criar esqueleto básico de PKGFILE
+  new --from-arch <pacote>         Importar PKGBUILD do Arch/AUR (requer revisão manual)
+  new --from-voidlinuxbr <pacote>  Importar template de pacote da Comunidade VoidLinuxBR (requer revisão manual)
+  new --from-void <pacote>         Importar template de pacote do Void Linux (requer revisão manual)
+  new --from-venom <pacote>        Importar template de pacote do Venom Linux (requer revisão manual)
+  -h, --help                       Mostrar este ajuda
+  -d, --debug                      Ativa modo debug
 
 Exemplos:
   pkgmake
@@ -152,8 +157,6 @@ Exemplos:
   pkgmake --sign-only --privkey minha-chave.pem
   pkgmake -q
   pkgmake new nano
-  pkgmake new --from-void htop
-  pkgmake new --from-voidlinuxbr nano
 ```
 
 ARQUIVO DE CONFIGURAÇÃO

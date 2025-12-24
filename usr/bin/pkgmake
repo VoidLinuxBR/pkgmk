@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 # shellcheck shell=bash disable=SC1091,SC2039,SC2166,SC2034
 #
-#  pkgmake — makepkg-like tool for XBPS
+#  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: ter 23 dez 2025 00:21:48 -03
+#  Updated: qua 24 dez 2025 00:10:36 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -35,8 +35,13 @@ export TEXTDOMAINDIR=/usr/share/locale
 export TEXTDOMAIN=pkgmake
 
 #debug
-export PS4='${red}${0##*/}${green}[$FUNCNAME]${pink}[$LINENO]${reset}'
+: "${rst=$(tput sgr0)}"
+: "${red=$(tput bold)$(tput setaf 196)}"
+: "${green=$(tput bold)$(tput setaf 2)}"
+: "${pink=$(tput setaf 5)}"
+export PS4='${red}${0##*/}${green}[$FUNCNAME]${pink}[$LINENO]${rst}'
 #set -x
+[[ " $* " =~ [[:space:]](-d|--debug)[[:space:]] ]] && DEBUG=1 && set -x
 set -e
 
 #system
@@ -74,8 +79,7 @@ if command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
 	reset="$(tput sgr0)"
 	rst="$(tput sgr0)"
 	bold="$(tput bold)"
-
-	black="$(tput setaf 0)"
+   black="$(tput bold)$(tput setaf 0)"
 	red="$(tput setaf 1)"
 	green="$(tput setaf 2)"
 	yellow="$(tput setaf 3)"
@@ -83,6 +87,8 @@ if command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
 	magenta="$(tput setaf 5)"
 	cyan="$(tput setaf 6)"
 	white="$(tput setaf 7)"
+   pink="$(tput setaf 5)"
+   orange="$(tput setaf 202)"
 else
 	# ANSI colors
 	reset='\033[0m'
@@ -96,13 +102,14 @@ else
 	cyan='\033[0;36m'
 	white='\033[0;37m'
 	bold='\033[1m'
+   pink='\033[95m'
 fi
 
 validate_pkgname() {
-	local name="$1"
+	local cname="$1"
 
-	[[ -z "$name" ]] && return 1
-	if [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+	[[ -z "$cname" ]] && return 1
+	if [[ ! "$cname" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
 		return 1
 	fi
 	return 0
@@ -113,6 +120,7 @@ pkgmake_new() {
 	local PKGNAME=""
 	local MODE="skeleton"
 	local DIRPKGFILE='local'
+
 	# -------- argumentos --------
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
@@ -126,6 +134,10 @@ pkgmake_new() {
 			;;
 		--from-void)
 			MODE="void"
+			shift
+			;;
+		--from-venom)
+			MODE="venom"
 			shift
 			;;
 		-*)
@@ -162,10 +174,164 @@ pkgmake_new() {
 	skeleton)
 		from_skeleton "$PKGNAME" "${DIRPKGFILE}"
 		;;
+	venom)
+		from_venom "$PKGNAME" "${DIRPKGFILE}"
+		;;
 	*)
 		die "modo interno inválido"
 		;;
 	esac
+}
+
+from_venom() {
+	local PKGNAME="$1"
+	local DIRPKGFILE="$2"
+	local pkg repo
+	local found=0
+	local depends_line depends_array
+	local desc_line pkgdesc
+
+	local VENOM_REPOS=(
+		core
+		main
+		multilib
+		nonfree
+		scripts
+		testing
+		archived
+	)
+
+	mkdir -p "${DIRPKGFILE}"
+	cd "${DIRPKGFILE}"
+
+	msg "Fetch package from Venom Linux ports"
+
+	# Parse: vim  OU  core/vim
+	if [[ "$PKGNAME" == */* ]]; then
+		repo="${PKGNAME%%/*}"
+		pkg="${PKGNAME##*/}"
+		VENOM_REPOS=("$repo")
+	else
+		pkg="$PKGNAME"
+	fi
+
+	TMP="$(mktemp -d)"
+	trap 'rm -rf "$TMP"' EXIT
+
+	git clone --depth=1 \
+		https://github.com/venomlinux/ports.git \
+		"$TMP/ports" >/dev/null 2>&1 ||
+		die "falha ao clonar venomlinux/ports"
+
+	for repo in "${VENOM_REPOS[@]}"; do
+		local srcdir="$TMP/ports/$repo/$pkg"
+
+		[[ -d "$srcdir" ]] || continue
+		[[ -f "$srcdir/spkgbuild" ]] || continue
+
+		found=1
+		msg "Package found: $repo/$pkg"
+
+		# description
+		desc_line="$(grep -E '^# description[[:space:]]*:' "$srcdir/spkgbuild" || true)"
+		if [[ -n "$desc_line" ]]; then
+			pkgdesc="$(printf '%s\n' "$desc_line" |
+				sed -E 's/^# description[[:space:]]*:[[:space:]]*//')"
+		else
+			pkgdesc=""
+		fi
+
+		# depends
+		depends_line="$(grep -E '^# depends[[:space:]]*:' "$srcdir/spkgbuild" || true)"
+		if [[ -n "$depends_line" ]]; then
+			depends_array="$(printf '%s\n' "$depends_line" |
+				sed -E 's/^# depends[[:space:]]*:[[:space:]]*//')"
+			depends_array="(${depends_array})"
+		else
+			depends_array="()"
+		fi
+
+		for f in "$srcdir"/*; do
+			case "$(basename "$f")" in
+			spkgbuild)
+				{
+					echo "#!/usr/bin/env bash"
+					echo "# NOTE: Imported from Venom Linux"
+					echo "# NOTE: Source: https://github.com/venomlinux/ports"
+					echo "# NOTE: Repo: $repo"
+					echo "# NOTE: Package: $pkg"
+					echo "# NOTE: This PKGFILE is PARTIAL and MUST be reviewed"
+					echo
+
+					awk -v dep="depends=${depends_array}" \
+						-v desc="$pkgdesc" '
+                     BEGIN {
+                        dep_inserted=0
+                        desc_inserted=0
+                     }
+
+                     /^# description[[:space:]]*:/ { next }
+                     /^# depends[[:space:]]*:/ { next }
+
+                     /^name=/ {
+                        print
+                        sub(/^name=/, "pkgname=")
+                        print
+                        next
+                     }
+
+                     /^version=/ {
+                        print
+                        sub(/^version=/, "pkgver=")
+                        print
+                        next
+                     }
+
+                     /^release=/ {
+                        print
+                        sub(/^release=/, "pkgrel=")
+                        print
+                        print "build_style=venom"
+                        if (desc != "" && !desc_inserted) {
+                           print "pkgdesc=\"" desc "\""
+                           desc_inserted=1
+                        }
+                        next
+                     }
+
+                     /^source=/ && !dep_inserted {
+                        print
+                        print dep
+                        dep_inserted=1
+                        next
+                     }
+
+                     { print }
+
+                     END {
+                        if (desc != "" && !desc_inserted) {
+                           print "pkgdesc=\"" desc "\""
+                        }
+                        if (!dep_inserted) {
+                           print dep
+                        }
+                     }
+                  ' "$f"
+				} >PKGFILE
+				;;
+			*)
+				cp -av "$f" .
+				;;
+			esac
+		done
+
+		msg "PKGFILE criado com sucesso."
+		msg "Entre no diretório com: cd ${DIRPKGFILE}"
+		msg "Revisão manual obrigatória."
+		exit 0
+	done
+
+	die "package '$pkg' not found in Venom ports"
 }
 
 from_skeleton() {
@@ -406,15 +572,26 @@ validate_config() {
 		fi
 	fi
 
-	#	# Contrato de build
-	#	if ((!HAS_BUILD && !HAS_BUILD_STYLE)); then
-	#		die "função build() ausente e nenhum build_style definido"
-	#	fi
+   # ---------------------------------------------
+   # Contrato de build / install
+   # ---------------------------------------------
 
-	# Contrato de instalação
-	if ((!HAS_PACKAGE && !HAS_BUILD_STYLE)); then
-		die "função package() ausente e nenhum build_style definido"
-	fi
+   if [[ "${build_style:-}" == "venom" ]]; then
+      # venom exige build()
+      ((HAS_BUILD)) || die "função build() ausente (build_style=venom)"
+
+   else
+      # não-venom
+      if [[ -n "${build_style:-}" ]]; then
+         # build_style existe → pode não ter build nem package
+         : # válido
+      else
+         # sem build_style → precisa de build OU package
+         if ((!HAS_BUILD && !HAS_PACKAGE)); then
+            die "nenhuma função build() ou package() definida"
+         fi
+      fi
+   fi
 
 }
 
@@ -478,12 +655,19 @@ gen_key() {
 
 normalize_dep_patterns() {
 	local var i dep
+
 	for var in depends makedepends; do
 		declare -p "$var" &>/dev/null || continue
 		declare -n arr="$var"
+
+		# remove elementos vazios
+		arr=("${arr[@]}")
+
 		for i in "${!arr[@]}"; do
 			dep="${arr[$i]}"
-			# se NÃO contém operador de versão (<, > ou =), adiciona >=0
+
+			[[ -n "$dep" ]] || continue
+
 			if ! [[ "$dep" =~ [\<\>\=] ]]; then
 				arr[$i]="${dep}>=0"
 			fi
@@ -491,7 +675,7 @@ normalize_dep_patterns() {
 	done
 }
 
-normalize_deps() {
+normalize_depsOLD() {
 	# depends
 	if declare -p depends &>/dev/null; then
 		if [[ "$(declare -p depends)" != declare\ -a* ]]; then
@@ -511,6 +695,23 @@ normalize_deps() {
 	else
 		makedepends=()
 	fi
+}
+
+normalize_deps() {
+	local v
+	for v in depends makedepends; do
+		if declare -p "$v" &>/dev/null; then
+			# se não for array, converte string → array
+			if [[ "$(declare -p "$v")" != declare\ -a* ]]; then
+				local tmp
+				tmp="${!v//$'\n'/ }"
+				read -r -a "$v" <<<"$tmp"
+			fi
+		else
+			# garante que exista como array
+			declare -a "$v=()"
+		fi
+	done
 }
 
 load_pkgfile() {
@@ -536,19 +737,34 @@ pkg_has_fn() {
 }
 
 lint() {
-	# build(): NÃO é obrigatória
-	# só falha se NÃO houver build() E NÃO houver build_style
-	if ! pkg_has_fn build && [[ -z "${build_style:-}" ]]; then
-		: # ok, pode não ter build
-	fi
+   # ---------------------------------------------
+   # build() / package() contract
+   # ---------------------------------------------
+   if [[ "${build_style:-}" == "venom" ]]; then
+      pkg_has_fn build || die "função build() ausente (build_style=venom)"
+   else
+      # sem venom:
+      # válido se existir build() OU package() OU build_style
+      if ! pkg_has_fn build && ! pkg_has_fn package && [[ -z "${build_style:-}" ]]; then
+         die "nenhuma função build() ou package() definida"
+      fi
+   fi
 
-	# aceita build_style no lugar de package()
+	# ---------------------------------------------
+	# package()
+	# ---------------------------------------------
+	# - obrigatório somente no modo padrão
+	# - opcional se houver build_style (ex: venom, gnu-*)
 	if ! pkg_has_fn package && [[ -z "${build_style:-}" ]]; then
 		die "função package() ausente"
 	fi
 
-	# Detecta PKGFILE que apaga o source (incompatível com pkgmake)
-	if grep -Eq 'rm[[:space:]]+-rf[[:space:]]+(\$|\$\{)(_pkgsrc|srcdir|pkgbase)|rm[[:space:]]+-rf[[:space:]]+["'"'"']?\$\{?pkgbase\}?-\$\{?pkgver\}?' "PKGFILE"; then
+	# ---------------------------------------------
+	# Proteção: não apagar source tree
+	# ---------------------------------------------
+	if grep -Eq \
+		'rm[[:space:]]+-rf[[:space:]]+(\$|\$\{)(_pkgsrc|srcdir|pkgbase)|rm[[:space:]]+-rf[[:space:]]+["'"'"']?\$\{?pkgbase\}?-\$\{?pkgver\}?' \
+		"PKGFILE"; then
 		die "PKGFILE inválido: não use 'rm -rf' no diretório de source (incompatível com pkgmake)"
 	fi
 }
@@ -585,10 +801,10 @@ fetch() {
 	for src in "${source[@]}"; do
 		# alias::source
 		if [[ "$src" == *::* ]]; then
-			name="${src%%::*}"
+			cname="${src%%::*}"
 			s="${src#*::}"
 		else
-			name=""
+			cname=""
 			s="$src"
 		fi
 
@@ -603,17 +819,17 @@ fetch() {
 			fi
 
 			# se não tiver alias, usa basename
-			[[ -z "$name" ]] && name="$(basename "$repo" .git)"
+			[[ -z "$cname" ]] && cname="$(basename "$repo" .git)"
 
-			if [[ -d "$name/.git" ]]; then
-				msg "Usando repositório git existente: $name"
+			if [[ -d "$cname/.git" ]]; then
+				msg "Usando repositório git existente: $cname"
 			else
 				msg "Fetching: ${yellow}$s${rst}"
-				cmd_run git clone "$repo" "$name" || die "falha ao clonar $repo"
+				cmd_run git clone "$repo" "$cname" || die "falha ao clonar $repo"
 			fi
 
 			if [[ -n "$tag" ]]; then
-				cmd_run git -C "$name" checkout "$tag" || die "falha ao fazer checkout do tag $tag"
+				cmd_run git -C "$cname" checkout "$tag" || die "falha ao fazer checkout do tag $tag"
 			fi
 			;;
 		http://* | https://*)
@@ -680,7 +896,7 @@ extract() {
 	((extracted)) || [[ "$HAS_GIT_SOURCE" -eq 1 ]] || die "nenhum tarball foi extraído"
 }
 
-detect_src() {
+detect_srcOLD() {
 	local d
 
 	d="$(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
@@ -691,6 +907,31 @@ detect_src() {
 	export wrksrc="$d"
 
 	# compatibilidade total: Arch (pkgdir) == Void (DESTDIR)
+	export pkgdir="$PKGDIR"
+	export DESTDIR="$PKGDIR"
+}
+
+detect_src() {
+	local dirs
+
+	mapfile -t dirs < <(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d)
+
+	case "${#dirs[@]}" in
+	0)
+		export srcdir="$SRCDIR"
+		export _pkgsrc="$SRCDIR"
+		export wrksrc="$SRCDIR"
+		;;
+	1)
+		export srcdir="$SRCDIR"
+		export _pkgsrc="${dirs[0]}"
+		export wrksrc="${dirs[0]}"
+		;;
+	*)
+		die "múltiplos diretórios de source encontrados após extração"
+		;;
+	esac
+
 	export pkgdir="$PKGDIR"
 	export DESTDIR="$PKGDIR"
 }
@@ -727,47 +968,65 @@ run_all() {
 	extract
 	detect_src
 
-	# estilo makepkg/xbps-src: cwd em srcdir
+	# -------------------------------------------------
+	# Define diretório de trabalho para o build
+	# -------------------------------------------------
 	cd "$srcdir" || die "falha ao entrar em srcdir"
 
+	# -------------------------------------------------
+	# Ambiente Venom (modelo spkgbuild)
+	# -------------------------------------------------
+	if [[ "${build_style:-}" == "venom" ]]; then
+		export SRC="$WORKDIR"
+		export PKG="$PKGDIR"
+		mkdir -p "$PKG"
+	fi
+
+	# -------------------------------------------------
+	# Prepare
+	# -------------------------------------------------
 	if pkg_has_fn prepare; then
 		msg "Prepare"
 		prepare
 	fi
 
+	# -------------------------------------------------
 	# Build
+	# -------------------------------------------------
 	if pkg_has_fn build; then
 		build
-	elif [[ -n "${build_style:-}" ]]; then
+	elif [[ -n "${build_style:-}" && "${build_style:-}" != "venom" ]]; then
 		do_build_style
 	else
 		: # build é opcional
 	fi
 
-	# staging único e seguro (Arch + Void)
-	mkdir -p "$DESTDIR"
-	[[ -n "$DESTDIR" && "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
+	# -------------------------------------------------
+	# DESTDIR (somente se NÃO for venom)
+	# -------------------------------------------------
+	if [[ "${build_style:-}" != "venom" ]]; then
+		[[ -n "${DESTDIR:-}" ]] || die "DESTDIR não definido"
+		mkdir -p "$DESTDIR"
+		[[ "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
+	fi
 
+	# -------------------------------------------------
+	# Pre-install
+	# -------------------------------------------------
 	if pkg_has_fn pre_install; then
 		msg "Package (pre-install)"
 		pre_install
 	fi
 
-	#   # Package / Install
-	#   if declare -f package >/dev/null; then
-	#     package
-	#   elif [[ -n "${build_style:-}" ]]; then
-	#     do_install_style
-	#   else
-	#     die "função package() ausente"
-	#   fi
-
-	if ((HAS_PACKAGE)); then
+	# -------------------------------------------------
+	# Package / Install
+	# -------------------------------------------------
+	if [[ "${build_style:-}" == "venom" ]]; then
+		msg "Package step skipped (build_style=venom)"
+	elif pkg_has_fn package; then
 		msg "Package"
-		# pacote controla o install
 		package
 	elif [[ -n "${build_style:-}" ]]; then
-		# install padrão do style (gnu-configure aqui)
 		msg "Package (fakeroot)"
 		command -v fakeroot >/dev/null 2>&1 || die "fakeroot não encontrado"
 		fakeroot make install DESTDIR="$DESTDIR" docdir=/usr/share/doc
@@ -775,18 +1034,17 @@ run_all() {
 		die "nenhuma função de install encontrada"
 	fi
 
-	# Post_install
+	# -------------------------------------------------
+	# Post-install
+	# -------------------------------------------------
 	if pkg_has_fn post_install; then
 		msg "Package (post-install)"
 		post_install
 	fi
 
-	#   for d in "${depends[@]}"; do
-	#    pkg="${d%%[<>=]*}"
-	#    xbps-query -R -p pkgname "$pkg" >/dev/null || die "dependência inválida ou inexistente: $d"
-	#   done
-
-	# depends já é array aqui (graças ao normalize_deps)
+	# -------------------------------------------------
+	# Depends
+	# -------------------------------------------------
 	deps_list="${depends[*]}"
 
 	INSTALL_OPTS=()
@@ -794,6 +1052,9 @@ run_all() {
 		INSTALL_OPTS+=(-S "$WORKDIR/INSTALL")
 	fi
 
+	# -------------------------------------------------
+	# Create XBPS
+	# -------------------------------------------------
 	msg "Create XBPS"
 	cmd_run xbps-create \
 		-A "$ARCH" \
@@ -813,15 +1074,15 @@ run_all() {
 
 	create_repodata
 
-	if [ "$INSTALLPKG" -eq 1 ]; then
+	if ((INSTALLPKG)); then
 		msg "Install package"
-		if [[ "$FORCEPKG" -eq 1 ]]; then
+		if ((FORCEPKG)); then
 			sudo xbps-install -R "$PKGDEST" -S -f "$pkgname"
 		else
 			sudo xbps-install -R "$PKGDEST" -S "$pkgname"
 		fi
 	else
-		msg "Install with: ${yellow}sudo xbps-install -R $PKGDEST -S ${pkgname}${rst}"
+		msg "Install with: ${yellow}sudo xbps-install -R $PKGDEST -S $pkgname${rst}"
 	fi
 }
 
@@ -830,6 +1091,9 @@ do_build_style() {
 	case "$build_style" in
 	gnu-configure)
 		do_build_gnu_configure
+		;;
+	venom)
+		do_build_venom
 		;;
 	*)
 		die "build_style não suportado: $build_style"
@@ -898,35 +1162,54 @@ do_install_gnu_configure() {
 	make DESTDIR="$PKGDEST" install
 }
 
+do_build_venom() {
+	msg "Build style: venom (monolithic build)"
+
+	pkg_has_fn build || die "função build() ausente (build_style=venom)"
+	build
+
+	if pkg_has_fn package; then
+		msg "Package"
+		package
+	else
+		msg "Package step skipped (build_style=venom)"
+	fi
+}
+
 clean() {
 	rm -rf "$SRCDIR" "$PKGDIR" "$PKGDEST"
 }
 
 usage() {
 	printf "%b\n" \
-		"${bold_blue}pkgmake${reset} — utilitário de build para pacotes XBPS
+		"${bold}${blue}pkgmake${rst} — utilitário de build para pacotes Void XBPS
+  ${bold}${orange}Copyright (c) 2019-2025, ${rst}ChiliLinux Development Team ${yellow}<https://chililinux.com> <https://github.com/chililimux>
+  ${bold}${orange}Copyright (c) 2025-2025, ${rst}VoidLinuxBR Development Team ${yellow}<https://www.youtube.com/@voidlinuxbr <https://github.com/voidlinuxbr> <https://t.me/VoidLinuxBrasil>
+  ${bold}${orange}Copyright (c) 2019-2025, ${rst}Vilmar Catafesta ${yellow}<vcatafesta@gmail.com> <https://github.com/vcatafesta>${rst}
 
 ${bold}Uso:${reset}
   pkgmake [opções]
 
 ${bold}Opções:${reset}
-  ${green}-s${reset}, ${green}--syncdeps${reset}                 Instalar depends e makedepends
-  ${green}-i${reset}, ${green}--install${reset}                  Instalar pacote após o build
-  ${green}-f${reset}, ${green}--force${reset}                    Forçar reinstalação do pacote
-  ${green}-q${reset}, ${green}--quiet${reset}                    Silenciar saída dos comandos
-  ${green}-v${reset}, ${green}--verbose${reset}                  Mostrar saída dos comandos
-      ${green}--sign${reset}                     Assinar pacote após o build
-      ${green}--sign-only${reset}                Somente assinar pacotes existentes no repo
-      ${green}--privkey${reset} ${yellow}<path>${reset}           Caminho da chave privada PEM (autodetecta se omitido)
-      ${green}--gen-key${reset}                  Gerar chave RSA 4096 em formato PEM
-  ${green}-c|--clean${reset}                     Limpar diretórios de trabalho
-  ${green}-p|--print-config${reset}              Imprimir configuracao do /etc/pkgmake.conf
-  ${green}-k|--pkgdest${reset} ${yellow}<path>${reset}            Diretório local onde os pacotes (.xbps) e o repodata serão gerados
-  ${green}new ${yellow}<nome>${reset}                     Criar esqueleto básico de PKGFILE
-  ${green}new --from-arch ${yellow}<nome>${reset}         Importar PKGBUILD do Arch/AUR (requer revisão manual)
-  ${green}new --from-voidlinuxbr ${yellow}<nome>${reset}  Importar template de pacote da Comunidade VoidLinuxBR (requer revisão manual)
-  ${green}new --from-void ${yellow}<nome>${reset}         Importar template de pacote do Void Linux (requer revisão manual)
-  ${green}-h${reset}, ${green}--help${reset}                     Mostrar este ajuda
+  ${green}-s${reset}, ${green}--syncdeps${reset}                   Instalar depends e makedepends
+  ${green}-i${reset}, ${green}--install${reset}                    Instalar pacote após o build
+  ${green}-f${reset}, ${green}--force${reset}                      Forçar reinstalação do pacote
+  ${green}-q${reset}, ${green}--quiet${reset}                      Silenciar saída dos comandos
+  ${green}-v${reset}, ${green}--verbose${reset}                    Mostrar saída dos comandos
+      ${green}--sign${reset}                       Assinar pacote após o build
+      ${green}--sign-only${reset}                  Somente assinar pacotes existentes no repo
+      ${green}--privkey${reset} ${yellow}<path>${reset}             Caminho da chave privada PEM (autodetecta se omitido)
+      ${green}--gen-key${reset}                    Gerar chave RSA 4096 em formato PEM
+  ${green}-c|--clean${reset}                       Limpar diretórios de trabalho
+  ${green}-p|--print-config${reset}                Imprimir configuracao do /etc/pkgmake.conf
+  ${green}-k|--pkgdest${reset} ${yellow}<path>${reset}              Diretório local onde os pacotes (.xbps) e o repodata serão gerados
+  ${green}new ${yellow}<pacote>${reset}                     Criar esqueleto básico de PKGFILE
+  ${green}new --from-arch ${yellow}<pacote>${reset}         Importar PKGBUILD do Arch/AUR (requer revisão manual)
+  ${green}new --from-voidlinuxbr ${yellow}<pacote>${reset}  Importar template de pacote da Comunidade VoidLinuxBR (requer revisão manual)
+  ${green}new --from-void ${yellow}<pacote>${reset}         Importar template de pacote do Void Linux (requer revisão manual)
+  ${green}new --from-venom ${yellow}<pacote>${reset}        Importar template de pacote do Venom Linux (requer revisão manual)
+  ${green}-h${reset}, ${green}--help${reset}                       Mostrar este ajuda
+  ${green}-d${reset}, ${green}--debug${reset}                      Ativa modo debug
 
 ${bold}Exemplos:${reset}
   pkgmake
@@ -1104,6 +1387,7 @@ sanitize_pkgfile_vars() {
 	# ---- nome do pacote ----
 	: "${pkgname:?pkgname não definido no PKGFILE}"
 	pkgbase="${pkgbase:-$pkgname}"
+	name="${name:-$pkgname}"
 
 	# ---- versão / revisão (Void → Arch) ----
 	if [[ -z "${pkgver:-}" && -n "${version:-}" ]]; then
@@ -1200,6 +1484,11 @@ while [[ $# -gt 0 ]]; do
 	-h | --help)
 		usage
 		exit 0
+		;;
+	-d | --debug)
+		DEBUG=1
+		set -x
+		shift
 		;;
 	*) die "opção inválida: $1" ;;
 	esac
