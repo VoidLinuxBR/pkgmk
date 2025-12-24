@@ -1254,24 +1254,19 @@ create_repodata() {
 
          # recria índice vazio
          cmd_run xbps-rindex -r "$PKGDEST"
+
+         #   cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
+         xbps-rindex -a "$PKGDEST/*.xbps"
          ;;
       0)
          msg "Update repodata (incremental)"
+         #   cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
+         xbps-rindex -a "$PKGDEST/${PKGOUT}"
          ;;
       *)
          die "REINDEX_FORCE inválido (use 0 ou 1): $REINDEX_FORCE"
          ;;
    esac
-
-   # adiciona pacotes UM A UM (igual xbps-src)
-#   local p
-#   for p in "$PKGDEST"/*.xbps; do
-#      [[ -f "$p" ]] || continue
-#      cmd_run xbps-rindex -a "$p" >/dev/null
-#   done
-
-#   cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
-   xbps-rindex -a "$PKGDEST/${PKGOUT}"
 
    # assina o índice (se habilitado)
    if [[ "$SIGNPKG" -eq 1 ]]; then
@@ -1343,7 +1338,6 @@ sign_only() {
    [[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote para assinar em $PKGDEST"
 
    for pkg in "${pkgs[@]}"; do
-echo $pkg
       msg "Sign package: $(basename "$pkg")"
       rm -f "$pkg.sig2"
       cmd_run xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$pkg"
