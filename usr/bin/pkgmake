@@ -647,12 +647,19 @@ gen_key() {
 
 normalize_dep_patterns() {
 	local var i dep
+
 	for var in depends makedepends; do
 		declare -p "$var" &>/dev/null || continue
 		declare -n arr="$var"
+
+		# remove elementos vazios
+		arr=("${arr[@]}")
+
 		for i in "${!arr[@]}"; do
 			dep="${arr[$i]}"
-			# se NÃO contém operador de versão (<, > ou =), adiciona >=0
+
+			[[ -n "$dep" ]] || continue
+
 			if ! [[ "$dep" =~ [\<\>\=] ]]; then
 				arr[$i]="${dep}>=0"
 			fi
@@ -660,7 +667,7 @@ normalize_dep_patterns() {
 	done
 }
 
-normalize_deps() {
+normalize_depsOLD() {
 	# depends
 	if declare -p depends &>/dev/null; then
 		if [[ "$(declare -p depends)" != declare\ -a* ]]; then
@@ -680,6 +687,23 @@ normalize_deps() {
 	else
 		makedepends=()
 	fi
+}
+
+normalize_deps() {
+	local v
+	for v in depends makedepends; do
+		if declare -p "$v" &>/dev/null; then
+			# se não for array, converte string → array
+			if [[ "$(declare -p "$v")" != declare\ -a* ]]; then
+				local tmp
+				tmp="${!v//$'\n'/ }"
+				read -r -a "$v" <<<"$tmp"
+			fi
+		else
+			# garante que exista como array
+			declare -a "$v=()"
+		fi
+	done
 }
 
 load_pkgfile() {
