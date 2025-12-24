@@ -130,25 +130,25 @@ Uso:
   pkgmake [opções]
 
 Opções:
-  -s, --syncdeps                 Instalar depends e makedepends
-  -i, --install                  Instalar pacote após o build
-  -f, --force                    Forçar reinstalação do pacote
-  -q, --quiet                    Silenciar saída dos comandos
-  -v, --verbose                  Mostrar saída dos comandos
-      --sign                     Assinar pacote após o build
-      --sign-only                Somente assinar pacotes existentes no repo
-      --privkey <path>           Caminho da chave privada PEM (autodetecta se omitido)
-      --gen-key                  Gerar chave RSA 4096 em formato PEM
-  -c|--clean                     Limpar diretórios de trabalho
-  -p|--print-config              Imprimir configuracao do /etc/pkgmake.conf
-  -k|--pkgdest <path>            Diretório local onde os pacotes (.xbps) e o repodata serão gerados
-  new <nome>                     Criar esqueleto básico de PKGFILE
-  new --from-arch <nome>         Importar PKGBUILD do Arch/AUR (requer revisão manual)
-  new --from-voidlinuxbr <nome>  Importar template de pacote da Comunidade VoidLinuxBR (requer revisão manual)
-  new --from-void <nome>         Importar template de pacote do Void Linux (requer revisão manual)
-  new --from-venom <nome>        Importar template de pacote do Venom Linux (requer revisão manual)
-  -h, --help                     Mostrar este ajuda
-  -d, --debug                    Ativa modo debug
+  -s, --syncdeps                   Instalar depends e makedepends
+  -i, --install                    Instalar pacote após o build
+  -f, --force                      Forçar reinstalação do pacote
+  -q, --quiet                      Silenciar saída dos comandos
+  -v, --verbose                    Mostrar saída dos comandos
+      --sign                       Assinar pacote após o build
+      --sign-only                  Somente assinar pacotes existentes no repo
+      --privkey <path>             Caminho da chave privada PEM (autodetecta se omitido)
+      --gen-key                    Gerar chave RSA 4096 em formato PEM
+  -c|--clean                       Limpar diretórios de trabalho
+  -p|--print-config                Imprimir configuracao do /etc/pkgmake.conf
+  -k|--pkgdest <path>              Diretório local onde os pacotes (.xbps) e o repodata serão gerados
+  new <pacote>                     Criar esqueleto básico de PKGFILE
+  new --from-arch <pacote>         Importar PKGBUILD do Arch/AUR (requer revisão manual)
+  new --from-voidlinuxbr <pacote>  Importar template de pacote da Comunidade VoidLinuxBR (requer revisão manual)
+  new --from-void <pacote>         Importar template de pacote do Void Linux (requer revisão manual)
+  new --from-venom <pacote>        Importar template de pacote do Venom Linux (requer revisão manual)
+  -h, --help                       Mostrar este ajuda
+  -d, --debug                      Ativa modo debug
 
 Exemplos:
   pkgmake
