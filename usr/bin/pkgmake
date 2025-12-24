@@ -257,9 +257,7 @@ from_venom() {
 				{
 					echo "#!/usr/bin/env bash"
 					echo "# NOTE: Imported from Venom Linux"
-					echo "# NOTE: Source: https://github.com/venomlinux/ports"
-					echo "# NOTE: Repo: $repo"
-					echo "# NOTE: Package: $pkg"
+					echo "# NOTE: Source: https://github.com/venomlinux/ports/$repo/$pkg"
 					echo "# NOTE: This PKGFILE is PARTIAL and MUST be reviewed"
 					echo
 
@@ -617,6 +615,7 @@ die() {
 	echo -e "${red}erro: $*${reset}" >&2
 	exit 1
 }
+
 msg() { echo -e "${cyan}==> $*${reset}"; }
 warn() { echo -e "${yellow}==> aviso: $*${reset}" >&2; }
 msg_error() {
@@ -667,34 +666,17 @@ normalize_dep_patterns() {
 			dep="${arr[$i]}"
 
 			[[ -n "$dep" ]] || continue
+		   [[ "$dep" == "()" ]] && continue
 
 			if ! [[ "$dep" =~ [\<\>\=] ]]; then
 				arr[$i]="${dep}>=0"
 			fi
 		done
+
+      # remove efetivamente os descartados
+      arr=("${arr[@]/()/}")
+      arr=("${arr[@]}")   # recompacta
 	done
-}
-
-normalize_depsOLD() {
-	# depends
-	if declare -p depends &>/dev/null; then
-		if [[ "$(declare -p depends)" != declare\ -a* ]]; then
-			depends="${depends//$'\n'/ }"
-			read -r -a depends <<<"$depends"
-		fi
-	else
-		depends=()
-	fi
-
-	# makedepends
-	if declare -p makedepends &>/dev/null; then
-		if [[ "$(declare -p makedepends)" != declare\ -a* ]]; then
-			makedepends="${makedepends//$'\n'/ }"
-			read -r -a makedepends <<<"$makedepends"
-		fi
-	else
-		makedepends=()
-	fi
 }
 
 normalize_deps() {
@@ -894,21 +876,6 @@ extract() {
 
 	# se tiver fonte git, não exige tarball
 	((extracted)) || [[ "$HAS_GIT_SOURCE" -eq 1 ]] || die "nenhum tarball foi extraído"
-}
-
-detect_srcOLD() {
-	local d
-
-	d="$(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-	[[ -n "$d" ]] || die "diretório source não encontrado após extração"
-
-	export srcdir="$SRCDIR"
-	export _pkgsrc="$d"
-	export wrksrc="$d"
-
-	# compatibilidade total: Arch (pkgdir) == Void (DESTDIR)
-	export pkgdir="$PKGDIR"
-	export DESTDIR="$PKGDIR"
 }
 
 detect_src() {
