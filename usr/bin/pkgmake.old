@@ -598,7 +598,7 @@ validate_config() {
 		else
 			# sem build_style → precisa de build OU package
 			if ((!HAS_BUILD && !HAS_PACKAGE)); then
-				die "nenhuma função build(), package() ou do_install() definida"
+				die "nenhuma função build() ou package() definida"
 			fi
 		fi
 	fi
@@ -732,36 +732,36 @@ pkg_has_fn() {
 }
 
 lint() {
-   # ---------------------------------------------
-   # Contrato de build / install (por capacidade)
-   # ---------------------------------------------
+	# ---------------------------------------------
+	# build() / package() contract
+	# ---------------------------------------------
+	if [[ "${build_style:-}" == "venom" ]]; then
+		pkg_has_fn build || die "função build() ausente (build_style=venom)"
+	else
+		# sem venom:
+		# válido se existir build() OU package() OU build_style
+		if ! pkg_has_fn build && ! pkg_has_fn package && [[ -z "${build_style:-}" ]]; then
+			die "nenhuma função build() ou package() definida"
+		fi
+	fi
 
-   # build_style=venom exige build real
-   if [[ "${build_style:-}" == "venom" ]]; then
-      (( HAS_BUILD )) || die "função de build ausente (build_style=venom)"
-   else
-      # modo normal:
-      # precisa ter alguma etapa válida: build, install ou build_style
-      if ! (( HAS_BUILD || HAS_PACKAGE || HAS_BUILD_STYLE )); then
-         die "nenhuma etapa de build ou install definida"
-      fi
-   fi
+	# ---------------------------------------------
+	# package()
+	# ---------------------------------------------
+	# - obrigatório somente no modo padrão
+	# - opcional se houver build_style (ex: venom, gnu-*)
+	if ! pkg_has_fn package && [[ -z "${build_style:-}" ]]; then
+		die "função package() ausente"
+	fi
 
-   # ---------------------------------------------
-   # Install obrigatório (quando não há build_style)
-   # ---------------------------------------------
-   if ! (( HAS_PACKAGE )) && [[ -z "${build_style:-}" ]]; then
-      die "nenhuma função de install definida (package() ou do_install())"
-   fi
-
-   # ---------------------------------------------
-   # Proteção: não apagar source tree
-   # ---------------------------------------------
-   if grep -Eq \
-      'rm[[:space:]]+-rf[[:space:]]+(\$|\$\{)(_pkgsrc|srcdir|pkgbase)|rm[[:space:]]+-rf[[:space:]]+["'"'"']?\$\{?pkgbase\}?-\$\{?pkgver\}?' \
-      "PKGFILE"; then
-      die "PKGFILE inválido: não use 'rm -rf' no diretório de source (incompatível com pkgmake)"
-   fi
+	# ---------------------------------------------
+	# Proteção: não apagar source tree
+	# ---------------------------------------------
+	if grep -Eq \
+		'rm[[:space:]]+-rf[[:space:]]+(\$|\$\{)(_pkgsrc|srcdir|pkgbase)|rm[[:space:]]+-rf[[:space:]]+["'"'"']?\$\{?pkgbase\}?-\$\{?pkgver\}?' \
+		"PKGFILE"; then
+		die "PKGFILE inválido: não use 'rm -rf' no diretório de source (incompatível com pkgmake)"
+	fi
 }
 
 strip_dep_op() {
@@ -789,10 +789,9 @@ sync_deps() {
 }
 
 fetch() {
-   msg "Fetch source"
-   [[ -n "$SRCDIR" ]] || die "SRCDIR não definido"
-   mkdir -p "$SRCDIR"
-   cd "$SRCDIR" || die "falha ao entrar em $SRCDIR"
+	msg "Fetch source"
+	mkdir -p "$SRCDIR"
+	cd "$SRCDIR"
 
 	for src in "${source[@]}"; do
 		# alias::source
@@ -893,28 +892,28 @@ extract() {
 }
 
 detect_src() {
-   local dirs
+	local dirs
 
-   mapfile -t dirs < <(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d)
+	mapfile -t dirs < <(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d)
 
-   case "${#dirs[@]}" in
-   0)
-      export srcdir="$SRCDIR"
-      export _pkgsrc="$SRCDIR"
-      export wrksrc="$SRCDIR"
-      ;;
-   1)
-      export srcdir="$SRCDIR"
-      export _pkgsrc="${dirs[0]}"
-      export wrksrc="${dirs[0]}"
-      ;;
-   *)
-      die "múltiplos diretórios de source encontrados após extração"
-      ;;
-   esac
+	case "${#dirs[@]}" in
+	0)
+		export srcdir="$SRCDIR"
+		export _pkgsrc="$SRCDIR"
+		export wrksrc="$SRCDIR"
+		;;
+	1)
+		export srcdir="$SRCDIR"
+		export _pkgsrc="${dirs[0]}"
+		export wrksrc="${dirs[0]}"
+		;;
+	*)
+		die "múltiplos diretórios de source encontrados após extração"
+		;;
+	esac
 
-   export pkgdir="$PKGDIR"
-   export DESTDIR="$PKGDIR"
+	export pkgdir="$PKGDIR"
+	export DESTDIR="$PKGDIR"
 }
 
 find_privkey() {
@@ -929,150 +928,138 @@ find_privkey() {
 }
 
 run_all() {
-   if (( GEN_KEY )); then
-      gen_key
-      exit 0
-   fi
+	if [[ "$GEN_KEY" -eq 1 ]]; then
+		gen_key
+		exit 0
+	fi
 
-   msg "Lint"
-   lint
+	msg "Lint"
+	lint
 
-   sync_deps
+	sync_deps
 
-   # -------------------------------------------------
-   # Fetch
-   # -------------------------------------------------
-   msg "Fetch"
-   fetch
+	fetch
+	extract
+	detect_src
 
-   # helpers (opcionais)
-   pkg_has_fn extract && extract
-   detect_src
+	# -------------------------------------------------
+	# Define diretório de trabalho para o build
+	# -------------------------------------------------
+	cd "$srcdir" || die "falha ao entrar em srcdir"
 
-   # -------------------------------------------------
-   # Diretório de trabalho
-   # -------------------------------------------------
-   cd "$srcdir" || die "falha ao entrar em srcdir"
+	# -------------------------------------------------
+	# Ambiente Venom (modelo spkgbuild)
+	# -------------------------------------------------
+	if [[ "${build_style:-}" == "venom" ]]; then
+		export SRC="$WORKDIR"
+		export PKG="$PKGDIR"
+		mkdir -p "$PKG"
+	fi
 
-   # -------------------------------------------------
-   # Ambiente Venom (spkgbuild)
-   # -------------------------------------------------
-   if [[ "${build_style:-}" == "venom" ]]; then
-      export SRC="$WORKDIR"
-      export PKG="$PKGDIR"
-      mkdir -p "$PKG"
-   fi
+	PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
 
-   PKGOUT="${pkgname}-${pkgver}_${pkgrel}.${ARCH}.xbps"
+	# -------------------------------------------------
+	# Prepare
+	# -------------------------------------------------
+	if pkg_has_fn prepare; then
+		msg "Prepare"
+		prepare
+	fi
 
-   # -------------------------------------------------
-   # Extract / Prepare
-   # -------------------------------------------------
-   if (( HAS_PREPARE )); then
-      msg "Prepare"
-      prepare
-   else
-      extract
-   fi
+	# -------------------------------------------------
+	# Build
+	# -------------------------------------------------
+	if pkg_has_fn build; then
+		build
+	elif [[ -n "${build_style:-}" && "${build_style:-}" != "venom" ]]; then
+		do_build_style
+	else
+		: # build é opcional
+	fi
 
-   # -------------------------------------------------
-   # Build
-   # -------------------------------------------------
-   if (( HAS_BUILD )); then
-      msg "Build"
-      build
-   elif (( HAS_BUILD_STYLE )) && [[ "${build_style:-}" != "venom" ]]; then
-      msg "Build style"
-      do_build_style
-   fi
+	# -------------------------------------------------
+	# DESTDIR (somente se NÃO for venom)
+	# -------------------------------------------------
+	if [[ "${build_style:-}" != "venom" ]]; then
+		[[ -n "${DESTDIR:-}" ]] || die "DESTDIR não definido"
+		mkdir -p "$DESTDIR"
+		[[ "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
+	fi
 
-   # -------------------------------------------------
-   # DESTDIR (exceto venom)
-   # -------------------------------------------------
-   if [[ "${build_style:-}" != "venom" ]]; then
-      [[ -n "${DESTDIR:-}" ]] || die "DESTDIR não definido"
-      mkdir -p "$DESTDIR"
-      [[ "$DESTDIR" != "/" ]] || die "DESTDIR inválido"
-   fi
+	# -------------------------------------------------
+	# Pre-install
+	# -------------------------------------------------
+	if pkg_has_fn pre_install; then
+		msg "Package (pre-install)"
+		pre_install
+	fi
 
-   # -------------------------------------------------
-   # Pre-install
-   # -------------------------------------------------
-   if pkg_has_fn pre_install; then
-      msg "Package (pre-install)"
-      pre_install
-   fi
+	# -------------------------------------------------
+	# Package / Install
+	# -------------------------------------------------
+	if [[ "${build_style:-}" == "venom" ]]; then
+		msg "Package step skipped (build_style=venom)"
+	elif pkg_has_fn package; then
+		msg "Package ${pkgname}"
+		package
+	elif [[ -n "${build_style:-}" ]]; then
+		msg "Package (fakeroot)"
+		command -v fakeroot >/dev/null 2>&1 || die "fakeroot não encontrado"
+		fakeroot make install DESTDIR="$DESTDIR" docdir=/usr/share/doc
+	else
+		die "nenhuma função de install encontrada"
+	fi
 
-   # -------------------------------------------------
-   # Package / Install
-   # -------------------------------------------------
-   if [[ "${build_style:-}" == "venom" ]]; then
-      msg "Package step skipped (build_style=venom)"
-   elif (( HAS_PACKAGE )); then
-      msg "Package ${pkgname}"
-      package
-   elif (( HAS_BUILD_STYLE )); then
-      msg "Package (fakeroot)"
-      command -v fakeroot >/dev/null 2>&1 || die "fakeroot não encontrado"
-      fakeroot make install DESTDIR="$DESTDIR" docdir=/usr/share/doc
-   else
-      die "nenhuma etapa de install encontrada"
-   fi
+	# -------------------------------------------------
+	# Post-install
+	# -------------------------------------------------
+	if pkg_has_fn post_install; then
+		msg "Package (post-install)"
+		post_install
+	fi
 
-   # -------------------------------------------------
-   # Post-install
-   # -------------------------------------------------
-   if pkg_has_fn post_install; then
-      msg "Package (post-install)"
-      post_install
-   fi
+	# -------------------------------------------------
+	# Depends
+	# -------------------------------------------------
+	deps_list="${depends[*]}"
 
-   # -------------------------------------------------
-   # Create XBPS
-   # -------------------------------------------------
-   deps_list="${depends[*]}"
+	INSTALL_OPTS=()
+	if [[ -f "$WORKDIR/INSTALL" ]]; then
+		INSTALL_OPTS+=(-S "$WORKDIR/INSTALL")
+	fi
 
-   INSTALL_OPTS=()
-   [[ -f "$WORKDIR/INSTALL" ]] && INSTALL_OPTS+=(-S "$WORKDIR/INSTALL")
+	# -------------------------------------------------
+	# Create XBPS
+	# -------------------------------------------------
+	msg "Create XBPS $PKGOUT"
+	cmd_run xbps-create \
+		-A "$ARCH" \
+		-n "${pkgname}-${pkgver}_${pkgrel}" \
+		-s "$pkgdesc" \
+		-l "$license" \
+		-D "$deps_list" \
+		"${INSTALL_OPTS[@]}" \
+		"$pkgdir"
 
-   msg "Create XBPS $PKGOUT"
-   cmd_run xbps-create \
-      -A "$ARCH" \
-      -n "${pkgname}-${pkgver}_${pkgrel}" \
-      -s "$pkgdesc" \
-      -l "$license" \
-      -D "$deps_list" \
-      "${INSTALL_OPTS[@]}" \
-      "$pkgdir"
+	# mover pacote criado para o $PKGDEST
+	mv -f "$PKGOUT" "$PKGDEST/"
 
-   # mover pacote para o repo local
-   mv -f "$PKGOUT" "$PKGDEST/"
+	if ((SIGNPKG)); then
+		sign_only "${PKGOUT}"
+	fi
 
-   # -------------------------------------------------
-   # Sign package (mantido como você pediu)
-   # -------------------------------------------------
-   if (( SIGNPKG )); then
-      sign_only "${PKGOUT}"
-   fi
+	create_repodata
 
-   # -------------------------------------------------
-   # Reindex repo
-   # -------------------------------------------------
-   create_repodata
-
-   # -------------------------------------------------
-   # Install opcional
-   # -------------------------------------------------
-   if (( INSTALLPKG )); then
-      msg "Install package"
-      if (( FORCEPKG )); then
-         sudo xbps-install -R "$PKGDEST" -S -f "$pkgname"
-      else
-         sudo xbps-install -R "$PKGDEST" -S "$pkgname"
-      fi
-   else
-      msg "Install with: sudo xbps-install -R $PKGDEST -S $pkgname"
-   fi
+	if ((INSTALLPKG)); then
+		msg "Install package"
+		if ((FORCEPKG)); then
+			sudo xbps-install -R "$PKGDEST" -S -f "$pkgname"
+		else
+			sudo xbps-install -R "$PKGDEST" -S "$pkgname"
+		fi
+	else
+		msg "Install with: ${yellow}sudo xbps-install -R $PKGDEST -S $pkgname${rst}"
+	fi
 }
 
 # dispatcher mínimo para build_style
@@ -1093,27 +1080,6 @@ do_build_style() {
 ################################################################################################################
 # HELPERS PARA VOID
 ################################################################################################################
-vcopy() {
-   local src="$1"
-   local dest="$2"
-   local s
-
-   # comportamento xbps-src: se faltar argumento, ignora
-   [[ -n "$src" && -n "$dest" ]] || return 0
-
-   s="$wrksrc/$src"
-
-   # se não existir, não faz nada
-   [[ -e "$s" ]] || return 0
-
-   if [[ -d "$s" ]]; then
-      mkdir -p "$DESTDIR/$dest"
-      cp -a "$s"/. "$DESTDIR/$dest"/
-   else
-      install -Dm644 "$s" "$DESTDIR/$dest"
-   fi
-}
-
 vsconf() {
 	local f="$1"
 
@@ -1406,11 +1372,6 @@ resolve_fns() {
 		prepare() { do_prepare "$@"; }
 	fi
 
-   # prepare (extract / patch)
-   if ! pkg_has_fn prepare && pkg_has_fn do_extract; then
-      prepare() { do_extract "$@"; }
-   fi
-
 	# build
 	if ! pkg_has_fn build && pkg_has_fn do_build; then
 		build() { do_build "$@"; }
@@ -1421,28 +1382,15 @@ resolve_fns() {
 		package() { do_install "$@"; }
 	fi
 
-   # fetch: sempre existe, do_fetch sobrescreve
-   if pkg_has_fn do_fetch; then
-      fetch() { do_fetch "$@"; }
-   fi
-
 	# ---- estado final (baseado NO PKGFILE) ----
-   # fetch é sempre obrigatório (estilo xbps-src)
-   HAS_FETCH=1
 	HAS_PREPARE=0
 	HAS_BUILD=0
 	HAS_PACKAGE=0
 	HAS_BUILD_STYLE=0
 
-	pkg_has_fn prepare    && HAS_PREPARE=1
-   pkg_has_fn do_extract && HAS_PREPARE=1
-   pkg_has_fn do_patch   && HAS_PREPARE=1
-
-	pkg_has_fn build      && HAS_BUILD=1
-   pkg_has_fn do_build   && HAS_BUILD=1
-
-	pkg_has_fn package    && HAS_PACKAGE=1
-   pkg_has_fn do_install && HAS_PACKAGE=1
+	pkg_has_fn prepare && HAS_PREPARE=1
+	pkg_has_fn build && HAS_BUILD=1
+	pkg_has_fn package && HAS_PACKAGE=1
 
 	[[ -n "$build_style" ]] && HAS_BUILD_STYLE=1 || true
 }
