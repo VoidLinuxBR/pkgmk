@@ -3,11 +3,11 @@
 pkgname=umc
 pkgdesc="Universal Modeline Calculator (UMC) - Calculadora de Modelines para Xorg"
 pkgver=0.2
-pkgrel=1
+pkgrel=2
 arch=("x86_64")
 url="https://sourceforge.net/projects/umc/"
 license=("GPL")
-depends=("gtk2")
+#depends=("gtk2")
 makedepends=("git" "autoconf" "automake")
 source=("git+https://github.com/chililinux/${pkgname}.git")
 sha256sums=("SKIP")
