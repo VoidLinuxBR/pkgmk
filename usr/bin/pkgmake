@@ -5,7 +5,7 @@
 #  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: qua 24 dez 2025 21:43:01 -04
+#  Updated: qui 25 dez 2025 15:44:06 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -363,13 +363,16 @@ from_skeleton() {
 pkgname=$PKGNAME
 pkgver=0.1.0
 pkgrel=1
-pkgdesc=""
-license=()
-homepage=""
-depends=()
+pkgdesc="Pacote exemplo"
+#build_style=local                     #local
+#build_style=venom                     #pacotes from venom
+#build_style=gnu-configure             #void
+license=('MIT')
+homepage="https://homepage.com"
+depends=('bash>=0')
 makedepends=()
-distfiles=()
-checksum=()
+source=('https://homepage.com/file.tar.gz')
+checksum=('SKIP')
 
 prepare() {
   :
@@ -789,11 +792,16 @@ sync_deps() {
 }
 
 fetch() {
-   msg "Fetch source"
    [[ -n "$SRCDIR" ]] || die "SRCDIR não definido"
    mkdir -p "$SRCDIR"
    cd "$SRCDIR" || die "falha ao entrar em $SRCDIR"
 
+   if [[ "$IS_LOCAL_SOURCE" -eq 1 ]]; then
+      msg "Pulando fetch (source local)"
+      return 0
+   fi
+
+   msg "Fetch source"
 	for src in "${source[@]}"; do
 		# alias::source
 		if [[ "$src" == *::* ]]; then
@@ -855,9 +863,14 @@ fetch() {
 }
 
 extract() {
-	msg "Extract source"
 	cd "$SRCDIR"
 
+   if [[ "$IS_LOCAL_SOURCE" -eq 1 ]]; then
+      msg "Pulando extract (source local)"
+      return 0
+   fi
+
+	msg "Extract source"
 	local extracted=0
 	shopt -s nullglob
 
@@ -888,13 +901,24 @@ extract() {
 		return 0
 	fi
 
-	# se tiver fonte git, não exige tarball
-	((extracted)) || [[ "$HAS_GIT_SOURCE" -eq 1 ]] || die "nenhum tarball foi extraído"
+   # Tarball foi extraído
+   if ((extracted)); then
+      return 0
+   fi
+
+   # Fallback final: fonte local (SRCDIR já é o source)
+   if [[ -n "$(ls -A . 2>/dev/null)" ]]; then
+      msg "Fonte local detectada (conteúdo já presente em SRCDIR)"
+      return 0
+   fi
+
+   die "nenhuma fonte encontrada (tarball, git ou src/)"
 }
 
 detect_src() {
    local dirs
 
+   msg "Detecando src"
    mapfile -t dirs < <(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d)
 
    case "${#dirs[@]}" in
@@ -942,7 +966,6 @@ run_all() {
    # -------------------------------------------------
    # Fetch
    # -------------------------------------------------
-   msg "Fetch"
    fetch
 
    # helpers (opcionais)
@@ -1444,7 +1467,20 @@ resolve_fns() {
 	pkg_has_fn package    && HAS_PACKAGE=1
    pkg_has_fn do_install && HAS_PACKAGE=1
 
-	[[ -n "$build_style" ]] && HAS_BUILD_STYLE=1 || true
+   IS_LOCAL_SOURCE=0
+   # declaração explícita
+   if [[ "${build_style:-}" == "local" || "${build_style:-}" == "manual-install" ]]; then
+      IS_LOCAL_SOURCE=1
+      msg "Source local detectado (build_style=${build_style})"
+      return 0
+   fi
+
+   # fallback implícito
+   if [[ -z "${distfiles:-}" && -z "${source:-}" ]]; then
+      IS_LOCAL_SOURCE=1
+      msg "Source local detectado (distfiles e source vazios)"
+      return 0
+   fi
 }
 
 resolve_pkgdest() {
