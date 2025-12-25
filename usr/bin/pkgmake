@@ -5,7 +5,7 @@
 #  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: qua 24 dez 2025 14:39:02 -04
+#  Updated: qua 24 dez 2025 21:43:01 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -1156,12 +1156,26 @@ clean() {
 	rm -rf "$SRCDIR" "$PKGDIR" "$PKGDEST"
 }
 
+sh_version() {
+   cat <<-EOF
+   ${BOLD}${CYAN}${0##*/} v${VERSION}${RESET}
+   ${APPDESC}
+   ${bold}${orange}Copyright (c) 2019-2025, ${rst}ChiliLinux Development Team ${yellow}<https://chililinux.com> <https://github.com/chililimux>
+   ${bold}${orange}Copyright (c) 2025-2025, ${rst}VoidLinuxBR Development Team ${yellow}<https://www.youtube.com/@voidlinuxbr <https://github.com/voidlinuxbr> <https://t.me/VoidLinuxBrasil>
+   ${bold}${orange}Copyright (c) 2019-2025, ${rst}Vilmar Catafesta ${yellow}<vcatafesta@gmail.com> <https://github.com/vcatafesta>${rst}
+
+   Este é um software livre: você é livre para alterá-lo e redistribuí-lo.
+   O $APP é disponibilizado para você sob a ${yellow}Licença MIT${black}, e
+   inclui software de código aberto sob uma variedade de outras licenças.
+   Você pode ler instruções sobre como baixar e criar para você mesmo
+   o código fonte específico usado para criar esta cópia.
+   ${red}Este programa vem com absolutamente NENHUMA garantia.${reset}
+EOF
+}
+
 usage() {
 	printf "%b\n" \
 		"${bold}${blue}pkgmake${rst} — utilitário de build para pacotes Void XBPS
-  ${bold}${orange}Copyright (c) 2019-2025, ${rst}ChiliLinux Development Team ${yellow}<https://chililinux.com> <https://github.com/chililimux>
-  ${bold}${orange}Copyright (c) 2025-2025, ${rst}VoidLinuxBR Development Team ${yellow}<https://www.youtube.com/@voidlinuxbr <https://github.com/voidlinuxbr> <https://t.me/VoidLinuxBrasil>
-  ${bold}${orange}Copyright (c) 2019-2025, ${rst}Vilmar Catafesta ${yellow}<vcatafesta@gmail.com> <https://github.com/vcatafesta>${rst}
 
 ${bold}Uso:${reset}
   pkgmake [opções]
@@ -1343,7 +1357,8 @@ sign_only() {
 	[[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote sem assinar em $PKGDEST"
 
 	for pkg in "${pkgs[@]}"; do
-		msg "Sign package: $(basename "$pkg")"
+#		msg "Sign package: $(basename "$pkg")"
+		msg "Sign package: $pkg"
 		rm -f "$pkg.sig2"
 		cmd_run xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$pkg"
 	done
@@ -1526,6 +1541,10 @@ while [[ $# -gt 0 ]]; do
 	-v | --verbose)
 		CLI_VERBOSE=1
 		shift
+		;;
+	-V | --version)
+	   sh_version
+	   exit 0
 		;;
 	-q | --quiet)
 		CLI_VERBOSE=0
