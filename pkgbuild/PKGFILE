@@ -22,13 +22,6 @@ depends=(
 	"util-linux>=0"
 )
 
-# Automatically detect and use the correct install file
-if [ -e "${pkgname}.install" ]; then
-	install=${pkgname}.install
-elif [ -e "pkgbuild.install" ]; then
-	install=pkgbuild.install
-fi
-
 package() {
 	local dirs=("usr" "etc" "opt")
 	#   echo "DESTDIR=$DESTDIR"
