@@ -5,7 +5,7 @@
 #  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: sex 26 dez 2025 03:47:40 -03
+#  Updated: sex 26 dez 2025 17:23:19 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -671,6 +671,43 @@ gen_key() {
 }
 
 normalize_dep_patterns() {
+   local var i dep
+
+   for var in depends makedepends; do
+      declare -p "$var" &>/dev/null || continue
+      declare -n arr="$var"
+
+      arr=("${arr[@]}")
+
+      for i in "${!arr[@]}"; do
+         dep="${arr[$i]}"
+
+         [[ -n "$dep" ]] || continue
+         [[ "$dep" == "()" ]] && continue
+
+         case "$var" in
+            depends)
+               # depends: se não tem operador, força >=0
+               if ! [[ "$dep" =~ [\<\>\=] ]]; then
+                  arr[$i]="${dep}>=0"
+               fi
+               ;;
+            makedepends)
+               # makedepends: não inventa constraint
+               arr[$i]="$dep"
+               ;;
+         esac
+      done
+
+      arr=("${arr[@]/()/}")
+      arr=("${arr[@]}")
+   done
+
+   #debug
+   echo ${makedepends[*]}
+}
+
+normalize_dep_patternsOLD() {
 	local var i dep
 
 	for var in depends makedepends; do
@@ -695,6 +732,10 @@ normalize_dep_patterns() {
 		arr=("${arr[@]/()/}")
 		arr=("${arr[@]}") # recompacta
 	done
+
+   #debug
+   echo ${makedepends[*]}
+   #exit 0
 }
 
 normalize_deps() {
@@ -784,11 +825,32 @@ strip_dep_op() {
 }
 
 sync_deps() {
+   [[ "$SYNCDEPS" -eq 1 ]] || return 0
+
+   local pkgs=()
+   [[ -n "${makedepends[*]}" ]] && pkgs+=("${makedepends[@]}")
+#  [[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
+   [[ "${#pkgs[@]}" -eq 0 ]] && return 0
+
+   local clean=()
+   for d in "${pkgs[@]}"; do
+      # se tem comparador, NÃO TOCA
+      if [[ "$d" =~ [\<\>\=] ]]; then
+         clean+=( "$d" )
+      else
+         clean+=( "$(strip_dep_op "$d")" )
+      fi
+   done
+
+   cmd_run sudo xbps-install -Sy "${clean[@]}"
+}
+
+sync_deps_OLD() {
 	[[ "$SYNCDEPS" -eq 1 ]] || return 0
 
 	local pkgs=()
 	[[ -n "${makedepends[*]}" ]] && pkgs+=("${makedepends[@]}")
-	[[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
+#	[[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
 	[[ "${#pkgs[@]}" -eq 0 ]] && return 0
 
 	local clean=()
@@ -796,7 +858,7 @@ sync_deps() {
 		clean+=("$(strip_dep_op "$d")")
 	done
 
-	cmd_run sudo xbps-install -Sy "${clean[@]}"
+   cmd_run sudo xbps-install -Sy "${clean[@]}"
 }
 
 fetch() {
@@ -1020,7 +1082,9 @@ run_all() {
    # -------------------------------------------------
    if (( HAS_BUILD )); then
       msg "Build"
-      build
+      if ! build; then
+        die "Build falhou, abortando empacotamento"
+      fi
    elif (( HAS_BUILD_STYLE )) && [[ "${build_style:-}" != "venom" ]]; then
       msg "Build style"
       do_build_style
@@ -1050,7 +1114,9 @@ run_all() {
       msg "Package step skipped (build_style=venom)"
    elif (( HAS_PACKAGE )); then
       msg "Package ${pkgname}"
-      package
+      if ! package; then
+        die "Package falhou, abortando empacotamento"
+      fi
    elif (( HAS_BUILD_STYLE )); then
       msg "Package (fakeroot)"
       command -v fakeroot >/dev/null 2>&1 || die "fakeroot não encontrado"
@@ -1743,5 +1809,5 @@ normalize_deps
 normalize_dep_patterns
 resolve_fns
 validate_config # validação FINAL, com tudo resolvido
-sync_deps
+#sync_deps
 run_all
