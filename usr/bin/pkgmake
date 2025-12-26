@@ -214,8 +214,7 @@ from_venom() {
 	)
 
 	mkdir -p "${DIRPKGFILE}"
-	cd "${DIRPKGFILE}"
-
+  	cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE} '"
 	msg "Fetch package from Venom Linux ports"
 
 	# Parse: vim  OU  core/vim
@@ -447,8 +446,7 @@ from_arch() {
 	local DIRPKGFILE="$2"
 
 	mkdir -p "${DIRPKGFILE}"
-	cd "${DIRPKGFILE}"
-
+  	cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE} '"
 	msg "Fetch PKGBUILD from Arch/AUR"
 
 	TMP="$(mktemp -d)"
@@ -743,6 +741,8 @@ pkg_has_fn() {
 }
 
 lint() {
+   msg "Lint"
+
    # ---------------------------------------------
    # Contrato de build / install (por capacidade)
    # ---------------------------------------------
@@ -929,7 +929,7 @@ extract() {
 detect_src() {
    local dirs
 
-   msg "Detecando src"
+   msg "Detectando src..."
    mapfile -t dirs < <(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d)
 
    # Compatibilidade:
@@ -952,7 +952,6 @@ detect_src() {
       die "múltiplos diretórios de source encontrados após extração"
       ;;
    esac
-
    export pkgdir="$PKGDIR"
    export DESTDIR="$PKGDIR"
 }
@@ -974,7 +973,9 @@ run_all() {
       exit 0
    fi
 
-   msg "Lint"
+   # -------------------------------------------------
+   # Lint
+   # -------------------------------------------------
    lint
 
    sync_deps
@@ -1110,7 +1111,7 @@ run_all() {
          sudo xbps-install -R "$PKGDEST" -S "$pkgname"
       fi
    else
-      msg "Install with: sudo xbps-install -R $PKGDEST -S $pkgname"
+      msg "Install with: ${yellow}sudo xbps-install -R $PKGDEST -S $pkgname${rst}"
    fi
 }
 
@@ -1394,7 +1395,7 @@ sign_onlyOLD() {
 	[[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote .xbps encontrado em $PKGDEST"
 
 	for pkg in "${pkgs[@]}"; do
-		msg "Sign package: $(basename "$pkg")"
+		msg "Sign package: ${yellow}$(basename "$pkg")${rst}"
 		rm -f "$pkg.sig2"
 		cmd_run xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$pkg"
 	done
