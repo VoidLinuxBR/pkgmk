@@ -5,7 +5,7 @@
 #  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: qui 25 dez 2025 15:44:06 -04
+#  Updated: sex 26 dez 2025 03:47:40 -03
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -42,7 +42,7 @@ export TEXTDOMAIN=pkgmake
 export PS4='${red}${0##*/}${green}[$FUNCNAME]${pink}[$LINENO]${rst}'
 #set -x
 [[ " $* " =~ [[:space:]](-d|--debug)[[:space:]] ]] && DEBUG=1 && set -x
-set -e
+set -o pipefail
 
 #system
 declare APP="${0##*/}"
@@ -415,7 +415,8 @@ from_voidlinuxbr() {
 
 	# Baixa template do VoidLinuxBR
 	if ! $DL "$REPO_URL/templates/$PKGNAME/PKGFILE" >"$TMP/PKGFILE" 2>/dev/null; then
-		rm -rf "$TMP"
+      [[ -n "$TMP" && "$TMP" != "/" ]] || die "TMP inválido"
+      rm -rf -- "$TMP"
 		die "template VoidLinuxBR não encontrado para pacote '$PKGNAME'"
 	fi
 
@@ -429,7 +430,8 @@ from_voidlinuxbr() {
 	} >PKGFILE
 
 	cd - >/dev/null || true
-	rm -rf "$TMP"
+   [[ -n "$TMP" && "$TMP" != "/" ]] || die "TMP inválido"
+   rm -rf -- "$TMP"
 
 	msg "PKGFILE criado com sucesso."
 	msg "Entre no diretório com: cd $DIRPKGFILE"
@@ -509,7 +511,8 @@ from_void() {
 
 	# Baixa template oficial (obrigatório)
 	if ! $DL "$VOID_REPO/srcpkgs/$pkg/template" >"$TMP/template" 2>/dev/null; then
-		rm -rf "$TMP"
+      [[ -n "$TMP" && "$TMP" != "/" ]] || die "TMP inválido"
+      rm -rf -- "$TMP"
 		die "template do Void não encontrado para pacote '$pkg'"
 	fi
 
@@ -544,7 +547,8 @@ from_void() {
 	fi
 
 	cd - >/dev/null || true
-	rm -rf "$TMP"
+   [[ -n "$TMP" && "$TMP" != "/" ]] || die "TMP inválido"
+   rm -rf -- "$TMP"
 
 	msg "PKGFILE criado com sucesso."
 	((HAS_INSTALL)) && msg "INSTALL criado com sucesso."
@@ -555,10 +559,10 @@ from_void() {
 
 parse_config() {
 	# Load global config
-	set +e
+	set +o pipefail
 	[[ -f /etc/pkgmake.conf ]] && source /etc/pkgmake.conf
 	ret=$?
-	set -e
+	set -o pipefail
 	((ret == 0)) || die "erro ao carregar /etc/pkgmake.conf"
 }
 
@@ -728,6 +732,10 @@ load_pkgfile() {
       declare -F | awk '{print \$3}'
     "
 	)"
+
+   # Normalizar - Garantem que as variáveis existam
+   : "${distfiles:=}"
+   : "${source:=}"
 }
 
 pkg_has_fn() {
@@ -796,7 +804,7 @@ fetch() {
    mkdir -p "$SRCDIR"
    cd "$SRCDIR" || die "falha ao entrar em $SRCDIR"
 
-   if [[ "$IS_LOCAL_SOURCE" -eq 1 ]]; then
+   if (( IS_LOCAL_SOURCE )); then
       msg "Pulando fetch (source local)"
       return 0
    fi
@@ -863,9 +871,9 @@ fetch() {
 }
 
 extract() {
-	cd "$SRCDIR"
+   cd "$SRCDIR" || die "falha ao entrar em $SRCDIR"
 
-   if [[ "$IS_LOCAL_SOURCE" -eq 1 ]]; then
+   if (( IS_LOCAL_SOURCE )) ; then
       msg "Pulando extract (source local)"
       return 0
    fi
@@ -907,8 +915,11 @@ extract() {
    fi
 
    # Fallback final: fonte local (SRCDIR já é o source)
-   if [[ -n "$(ls -A . 2>/dev/null)" ]]; then
-      msg "Fonte local detectada (conteúdo já presente em SRCDIR)"
+   if (( IS_LOCAL_SOURCE )); then
+      if [[ -z "$(ls -A . 2>/dev/null)" ]]; then
+         die "source local declarado, mas SRCDIR está vazio"
+      fi
+      msg "Source local confirmado (conteúdo já presente em SRCDIR)"
       return 0
    fi
 
@@ -920,6 +931,11 @@ detect_src() {
 
    msg "Detecando src"
    mapfile -t dirs < <(find "$SRCDIR" -mindepth 1 -maxdepth 1 -type d)
+
+   # Compatibilidade:
+   # SRCDIR   → diretório raiz do source
+   # srcdir   → alias (Arch/Venom)
+   # _pkgsrc  → alias (pkgmake/xbps)
 
    case "${#dirs[@]}" in
    0)
@@ -1210,7 +1226,8 @@ do_build_venom() {
 }
 
 clean() {
-	rm -rf "$SRCDIR" "$PKGDIR" "$PKGDEST"
+   [[ -n "$SRCDIR" && -n "$PKGDIR" && -n "$PKGDEST" ]] || die "variáveis de clean inválidas"
+   rm -rf -- "$SRCDIR" "$PKGDIR" "$PKGDEST"
 }
 
 sh_version() {
