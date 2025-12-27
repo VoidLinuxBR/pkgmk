@@ -4,7 +4,7 @@ ETCDIR  = /etc
 SHAREDIR = $(PREFIX)/share/pkgmake
 DOCDIR = $(PREFIX)/share/doc/pkgmake
 
-BIN_FILES = usr/bin/pkgnew usr/bin/pkgmake
+BIN_FILES = usr/bin/pkgmake
 ETC_FILES = etc/pkgmake.conf
 SHARE_FILES = usr/share/pkgmake/*.sh
 
@@ -24,7 +24,6 @@ install:
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/pkgmake
-	rm -f $(DESTDIR)$(BINDIR)/pkgnew
 	rm -f $(ETCDIR)/pkgmake.conf
 	rm -rf $(DESTDIR)$(SHAREDIR)
 	rm -rf $(DESTDIR)$(DOCDIR)
