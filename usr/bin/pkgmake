@@ -5,7 +5,7 @@
 #  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: sex 26 dez 2025 21:32:31 -04
+#  Updated: sáb 27 dez 2025 03:43:51 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -50,6 +50,8 @@ declare _VERSION_="0.12.21-20251221"
 declare APPDESC="$APP - Wraper for xbps-create"
 declare distro="$(uname -n)"
 declare DEPENDENCIES=(tput)
+declare FETCH_RE='-[^-]+[0-9]+[^.]*.xbps$'
+declare PKG_EXT='xbps'
 
 WORKDIR="$PWD"
 SRCDIR="$WORKDIR/src"
@@ -1379,6 +1381,7 @@ ${bold}Opções:${reset}
       ${green}--reindex${reset}                    Atualizar o índice do repositório local após o build
       ${green}--reindex-only${reset}               Recriar o índice do repositório local e sair
       ${green}--reindex-all${reset}                Assinar todos os pacotes e recriar o índice do repositório local e sair
+      ${green}--dedup-repo${reset}                 Remove pacotes duplicados do repositório local, mantém a mais nova
   ${green}-c|--clean${reset}                       Limpar diretórios de trabalho
   ${green}-p|--print-config${reset}                Imprimir configuracao do /etc/pkgmake.conf
   ${green}-k|--pkgdest${reset} ${yellow}<path>${reset}              Diretório local onde os pacotes (.xbps) e o repodata serão gerados
@@ -1387,8 +1390,8 @@ ${bold}Opções:${reset}
   ${green}new --from-voidlinuxbr ${yellow}<pacote>${reset}  Importar template de pacote da Comunidade VoidLinuxBR (requer revisão manual)
   ${green}new --from-void ${yellow}<pacote>${reset}         Importar template de pacote do Void Linux (requer revisão manual)
   ${green}new --from-venom ${yellow}<pacote>${reset}        Importar template de pacote do Venom Linux (requer revisão manual)
-  ${green}-h${reset}, ${green}--help${reset}                       Mostrar este ajuda
   ${green}-d${reset}, ${green}--debug${reset}                      Ativa modo debug
+  ${green}-h${reset}, ${green}--help${reset}                       Mostrar este ajuda
 
 ${bold}Exemplos:${reset}
   pkgmake
@@ -1764,6 +1767,23 @@ if [[ "$1" == "new" ]]; then
 	exit 0
 fi
 
+dedup_repo() {
+  local old
+  local AllOldPackages
+  local lretval=1
+
+  msg "Iniciando deduplicação de pacotes no repositório local: $PKGDEST"
+  AllOldPackages=$(find "$PKGDEST" -type f -iname "*.$PKG_EXT" | sort -Vr | awk -F "$FETCH_RE" 'lista[$1]++')
+  for old in ${AllOldPackages[*]}; do
+    msg "${red}=>Removendo pacote antigo: [$((++count))] => $(basename "${old}") ${reset}"
+    msg "${red}=>Removendo pacote antigo: [$((count))] => $(basename "${old}.sig2") ${reset}"
+    rm -f "${old}" "${old}".sig2 >/dev/null 2>&-
+    lretval=0
+  done
+  msg "Done!"
+  return $lretval
+}
+
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	-s | --syncdeps)
@@ -1822,11 +1842,19 @@ while [[ $# -gt 0 ]]; do
 		clean
 		exit 0
 		;;
+  --dedup-repo)
+    parse_config
+    if dedup_repo; then
+      REINDEX_FORCE=1
+      create_repodata
+    fi
+    exit 0
+    ;;
 	-p | --print-config)
-	   parse_config
-		print_config
-		exit 0
-		;;
+      parse_config
+		  print_config
+		  exit 0
+		  ;;
 	-k | --pkgdest)
 		CLI_PKGDEST="$2"
 		shift 2
