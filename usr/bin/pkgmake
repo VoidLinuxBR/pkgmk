@@ -5,7 +5,7 @@
 #  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: sex 26 dez 2025 17:23:19 -04
+#  Updated: sex 26 dez 2025 21:32:31 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -704,7 +704,8 @@ normalize_dep_patterns() {
    done
 
    #debug
-   echo ${makedepends[*]}
+   #echo ${makedepends[*]}
+   #exit 0
 }
 
 normalize_dep_patternsOLD() {
@@ -734,7 +735,7 @@ normalize_dep_patternsOLD() {
 	done
 
    #debug
-   echo ${makedepends[*]}
+   #echo ${makedepends[*]}
    #exit 0
 }
 
