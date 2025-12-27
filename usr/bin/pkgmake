@@ -625,11 +625,11 @@ cmd_run() {
 		"$@"
 	fi
 	local rc=$?
-	[[ $rc -eq 0 ]] || die "comando falhou: $*"
+	[[ $rc -eq 0 ]] || die "comando falhou: \n$*"
 }
 
 die() {
-	echo -e "${red}erro: $*${reset}" >&2
+	echo -e "${red}ERRO: $*${reset}" >&2
 	exit 1
 }
 
