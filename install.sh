@@ -56,8 +56,7 @@ info "Baixando arquivos do GitHub..."
 
 # Binários
 $DL "$REPO_URL/usr/bin/pkgmake" > "$TMPDIR/pkgmake"
-$DL "$REPO_URL/usr/bin/pkgnew"  > "$TMPDIR/pkgnew"
-chmod +x "$TMPDIR/pkgmake" "$TMPDIR/pkgnew"
+chmod +x "$TMPDIR/pkgmake"
 
 # Share files
 info "Baixando arquivos auxiliares..."
@@ -77,7 +76,6 @@ info "Instalando arquivos..."
 
 # Instala binários
 install -Dm755 "$TMPDIR/pkgmake" "$BIN_DIR/pkgmake"
-install -Dm755 "$TMPDIR/pkgnew"  "$BIN_DIR/pkgnew"
 
 # Instala arquivos de suporte
 for f in "$TMPDIR"/share/*; do
