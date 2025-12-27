@@ -448,21 +448,25 @@ from_arch() {
 	local PKGNAME="$1"
 	local DIRPKGFILE="$2"
 
-	mkdir -p "${DIRPKGFILE}"
-  	cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE} '"
 	msg "Fetch PKGBUILD from Arch/AUR"
+#	mkdir -p "${DIRPKGFILE}"
+#  cd "${DIRPKGFILE}" || die "não foi possível entrar no diretório '${DIRPKGFILE} '"
 
-	TMP="$(mktemp -d)"
-	trap 'rm -rf "$TMP"' EXIT
-
-	if ! curl -fsSL \
-		"https://gitlab.archlinux.org/archlinux/packaging/packages/$PKGNAME/-/raw/main/PKGBUILD" \
-		-o "$TMP/PKGBUILD"; then
-		curl -fsSL \
-			"https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=$PKGNAME" \
-			-o "$TMP/PKGBUILD" || die "PKGBUILD não encontrado"
-	fi
-
+#	TMP="$(mktemp -d)"
+#	trap 'rm -rf "$TMP"' EXIT
+#
+#	if ! curl -fsSL \
+#		"https://gitlab.archlinux.org/archlinux/packaging/packages/$PKGNAME/-/raw/main/PKGBUILD" \
+#		-o "$TMP/PKGBUILD"; then
+#		curl -fsSL \
+#			"https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=$PKGNAME" \
+#			-o "$TMP/PKGBUILD" || die "PKGBUILD não encontrado"
+#	fi
+#
+  cmd_run git clone --depth=1 https://gitlab.archlinux.org/archlinux/packaging/packages/"$PKGNAME" "arch-$PKGNAME" || die "Erro ao clonar"
+  cmd_run pushd "arch-$PKGNAME"
+  cmd_run find . -type f \( -name '*.toml' -o -name '.*.toml' \) -delete
+  cmd_run find . -name '.SRCINFO' -type f -delete
 	# -------------------------------------------------
 	# GERA PKGFILE (SEM MUTILAR source)
 	# -------------------------------------------------
@@ -471,16 +475,13 @@ from_arch() {
 		echo "# NOTE: Imported from Arch PKGBUILD"
 		echo "# NOTE: This PKGFILE is PARTIAL and MUST be reviewed"
 		echo
-
-		# remove linhas que quebram execução fora do makepkg
-		sed \
-			-e '/^pkgbase=/d' \
-			-e '/^validpgpkeys=/d' \
-			-e '/^_.*=/d' \
-			"$TMP/PKGBUILD"
+		cat PKGBUILD
 	} >PKGFILE
+  cmd_run rm PKGBUILD || true
+  cmd_run popd
+
 	msg "PKGFILE criado com sucesso."
-	msg "Entre no diretório com: cd ${DIRPKGFILE} "
+	msg "Entre no diretório com: cd arch-$PKGNAME"
 	msg "Revisão manual obrigatória."
 	exit 0
 }
@@ -1077,6 +1078,7 @@ run_all() {
    # -------------------------------------------------
    if (( HAS_PREPARE )); then
       msg "Prepare"
+      extract
       prepare
    else
       extract
@@ -1844,10 +1846,9 @@ while [[ $# -gt 0 ]]; do
 		;;
   --dedup-repo)
     parse_config
-    if dedup_repo; then
-      REINDEX_FORCE=1
-      create_repodata
-    fi
+    dedup_repo
+    REINDEX_FORCE=1
+    create_repodata
     exit 0
     ;;
 	-p | --print-config)
