@@ -371,6 +371,7 @@ homepage="https://homepage.com"
 depends=('bash>=0')
 makedepends=()
 source=('https://homepage.com/file.tar.gz')
+backup=()
 checksum=('SKIP')
 
 prepare() {
@@ -704,8 +705,9 @@ normalize_dep_patterns() {
    done
 
    #debug
-   #echo ${makedepends[*]}
-   #exit 0
+#   echo "depends     ${depends[*]}"
+#   echo "makedepends ${makedepends[*]}"
+#   exit 0
 }
 
 normalize_dep_patternsOLD() {
@@ -1135,21 +1137,63 @@ run_all() {
    fi
 
    # -------------------------------------------------
+   # Grava arquivos para backup
+   # -------------------------------------------------
+   resolve_conffiles
+
+   # -------------------------------------------------
    # Create XBPS
    # -------------------------------------------------
+#      OPTIONS
+#       -A, --architecture   Package architecture (e.g: noarch, i686, etc)
+#       -B, --built-with     Package builder string (e.g: xbps-src-30)
+#       -C, --conflicts      Conflicts (blank separated list, e.g: 'foo>=2.0 blah<=2.0')
+#       -c, --changelog      Changelog URL
+#       -D, --dependencies   Dependencies (blank separated list, e.g: 'foo>=1.0_1 blah<2.1')
+#       -F, --config-files   Configuration files (blank separated list,
+#                            e.g '/etc/foo.conf /etc/foo-blah.conf')
+#       -H, --homepage       Homepage
+#       -h, --help           Show usage
+#       -l, --license        License
+#       -M, --mutable-files  Mutable files list (blank separated list,
+#                            e.g: '/usr/lib/foo /usr/bin/blah')
+#       -m, --maintainer     Maintainer
+#       -n, --pkgver         Package name/version tuple (e.g `foo-1.0_1')
+#       -P, --provides       Provides (blank separated list, e.g: 'foo-9999 blah-1.0')
+#       -p, --preserve       Enable package preserve boolean
+#       -q, --quiet          Work silently
+#       -R, --replaces       Replaces (blank separated list, e.g: 'foo>=1.0 blah<2.0')
+#       -r, --reverts        Reverts (blank separated list, e.g: '1.0_1 2.0_3')
+#       -S, --long-desc      Long description (80 cols per line)
+#       -s, --desc           Short description (max 80 characters)
+#       -t, --tags           A list of tags/categories (blank separated list)
+#       -V, --version        Show XBPS version
+#       --alternatives       List of available alternatives this pkg provides
+#                            This expects a blank separated list of <name>:<symlink>:<target>, e.g
+#                            'vi:/usr/bin/vi:/usr/bin/vim foo:/usr/bin/foo:/usr/bin/blah'
+#       --build-options      A string with the used build options
+#       --compression        Compression format: none, gzip, bzip2, lz4, xz, zstd (default)
+#       --shlib-provides     List of provided shared libraries (blank separated list,
+#                            e.g 'libfoo.so.1 libblah.so.2')
+#       --shlib-requires     List of required shared libraries (blank separated list,
+#                            e.g 'libfoo.so.1 libblah.so.2')
+
    deps_list="${depends[*]}"
 
    INSTALL_OPTS=()
    [[ -f "$WORKDIR/INSTALL" ]] && INSTALL_OPTS+=(-S "$WORKDIR/INSTALL")
+   deps_quoted=$(printf "'%s'" "$deps_list")
+   conf_quoted=$(printf "'%s'" "$conf_files_arg")
 
    msg "Create XBPS $PKGOUT"
    cmd_run xbps-create \
-      -A "$ARCH" \
-      -n "${pkgname}-${pkgver}_${pkgrel}" \
-      -s "$pkgdesc" \
-      -l "$license" \
-      -D "$deps_list" \
-      "${INSTALL_OPTS[@]}" \
+      --architecture "$ARCH" \
+      --pkgver "${pkgname}-${pkgver}_${pkgrel}" \
+      --desc "$pkgdesc" \
+      --maintainer "$PACKAGER" \
+      --license "$license" \
+      --dependencies "$deps_list" \
+      --config-files "$conf_files_arg" \
       "$pkgdir"
 
    # mover pacote para o repo local
@@ -1178,7 +1222,7 @@ run_all() {
          sudo xbps-install -R "$PKGDEST" -S "$pkgname"
       fi
    else
-      msg "Install with: ${yellow}sudo xbps-install -R $PKGDEST -S $pkgname${rst}"
+      msg "Install with: ${yellow}sudo /usr/bin/xbps-install -R $PKGDEST -S $pkgname${rst}"
    fi
 }
 
@@ -1506,6 +1550,17 @@ sign_only() {
 	done
 }
 
+resolve_conffiles() {
+   conf_files_arg=""
+   if [[ -n "${backup[*]}" ]]; then
+      conf_files_arg="$(printf '%s ' "${backup[@]}")"
+      conf_files_arg="${conf_files_arg% }"
+   fi
+
+   # testar para ver o resultado
+   # xbps-query --property=conf_files pkgmake
+}
+
 resolve_fns() {
 	# ---- wrappers (somente se o PKGFILE NÃO definiu a função) ----
 
@@ -1678,11 +1733,23 @@ sanitize_pkgfile_vars() {
 		source="$distfiles"
 	fi
 
-	# garantir array
+	# garantir array source
 	if [[ -z "${source:-}" ]]; then
 		source=()
 	elif [[ "$(declare -p source 2>/dev/null)" != "declare -a"* ]]; then
 		source=("$source")
+	fi
+
+	# ---- conf_files / backup (Void → Arch) ----
+	if [[ -z "${backup:-}" && -n "${conf_files:-}" ]]; then
+	   backup="$conf_files"
+	fi
+
+	# garantir array backup
+	if [[ -z "${backup:-}" ]]; then
+		backup=()
+	elif [[ "$(declare -p backup 2>/dev/null)" != "declare -a"* ]]; then
+		backup=("$backup")
 	fi
 
 	# ---- arrays canônicos ----
