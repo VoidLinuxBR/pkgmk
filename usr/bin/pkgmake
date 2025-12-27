@@ -1190,6 +1190,7 @@ run_all() {
       --architecture "$ARCH" \
       --pkgver "${pkgname}-${pkgver}_${pkgrel}" \
       --desc "$pkgdesc" \
+      --maintainer "$PACKAGER" \
       --license "$license" \
       --dependencies "$deps_list" \
       --config-files "$conf_files_arg" \
