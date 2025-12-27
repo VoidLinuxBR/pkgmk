@@ -371,6 +371,7 @@ homepage="https://homepage.com"
 depends=('bash>=0')
 makedepends=()
 source=('https://homepage.com/file.tar.gz')
+backup=()
 checksum=('SKIP')
 
 prepare() {
@@ -1550,10 +1551,13 @@ sign_only() {
 
 resolve_conffiles() {
    conf_files_arg=""
-   if [[ -n "${conf_files[*]}" ]]; then
-      conf_files_arg="$(printf '%s ' "${conf_files[@]}")"
+   if [[ -n "${backup[*]}" ]]; then
+      conf_files_arg="$(printf '%s ' "${backup[@]}")"
       conf_files_arg="${conf_files_arg% }"
    fi
+
+   # testar para ver o resultado
+   # xbps-query --property=conf_files pkgmake
 }
 
 resolve_fns() {
@@ -1728,11 +1732,23 @@ sanitize_pkgfile_vars() {
 		source="$distfiles"
 	fi
 
-	# garantir array
+	# garantir array source
 	if [[ -z "${source:-}" ]]; then
 		source=()
 	elif [[ "$(declare -p source 2>/dev/null)" != "declare -a"* ]]; then
 		source=("$source")
+	fi
+
+	# ---- conf_files / backup (Void → Arch) ----
+	if [[ -z "${backup:-}" && -n "${conf_files:-}" ]]; then
+	   backup="$conf_files"
+	fi
+
+	# garantir array backup
+	if [[ -z "${backup:-}" ]]; then
+		backup=()
+	elif [[ "$(declare -p backup 2>/dev/null)" != "declare -a"* ]]; then
+		backup=("$backup")
 	fi
 
 	# ---- arrays canônicos ----

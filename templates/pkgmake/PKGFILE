@@ -20,10 +20,7 @@ depends=(
 	coreutils
    base-devel
 )
-conf_files=(
-  /etc/pkgmake.conf
-  /etc/vilmar.conf
-)
+backup=( /etc/pkgmake.conf )
 
 # Automatically detect and use the correct install file
 if [ -e "${pkgname}.install" ]; then
