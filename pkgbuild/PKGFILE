@@ -12,15 +12,25 @@ provides=("$pkgname")
 source=("git+${url}.git")
 md5sums=('SKIP')
 depends=(
-	"base-devel>=0"
-	"bash>=0"
-	"curl>=0"
-	"git>=0"
-	"xbps>=0"
-	"xbps-triggers>=0"
-	"coreutils>=0"
-	"util-linux>=0"
+   bash
+	curl
+	git
+	xbps
+	xbps-triggers
+	coreutils
+   base-devel
 )
+conf_files=(
+  /etc/pkgmake.conf
+  /etc/vilmar.conf
+)
+
+# Automatically detect and use the correct install file
+if [ -e "${pkgname}.install" ]; then
+	install=${pkgname}.install
+elif [ -e "pkgbuild.install" ]; then
+	install=pkgbuild.install
+fi
 
 package() {
 	local dirs=("usr" "etc" "opt")
@@ -35,4 +45,7 @@ package() {
 			cp -a "${_pkgsrc}/${dir}" "$DESTDIR/"
 		fi
 	done
+
+#	install -Dm644 etc/pkgmake.conf $DESTDIR/etc/pkgmake.conf.new-${pkgver}-${pkgrel}
+	install -Dm644 etc/pkgmake.conf $DESTDIR/etc/pkgmake.conf.new
 }
