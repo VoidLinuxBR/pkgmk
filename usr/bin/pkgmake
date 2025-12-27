@@ -1184,12 +1184,6 @@ run_all() {
    deps_quoted=$(printf "'%s'" "$deps_list")
    conf_quoted=$(printf "'%s'" "$conf_files_arg")
 
-#   echo "$deps_quoted"
-#   exit 0
-
-#      --dependencies "$deps_quoted" \
-#      --config-files "$conf_quoted" \
-
    msg "Create XBPS $PKGOUT"
    cmd_run xbps-create \
       --architecture "$ARCH" \
