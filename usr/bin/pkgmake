@@ -1844,10 +1844,9 @@ while [[ $# -gt 0 ]]; do
 		;;
   --dedup-repo)
     parse_config
-    if dedup_repo; then
-      REINDEX_FORCE=1
-      create_repodata
-    fi
+    dedup_repo
+    REINDEX_FORCE=1
+    create_repodata
     exit 0
     ;;
 	-p | --print-config)
