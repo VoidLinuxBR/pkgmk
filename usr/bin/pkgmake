@@ -5,7 +5,7 @@
 #  pkgmake — makepkg-like tool for Void XBPS
 #  Created: dom 21 dez 2025 11:47:51 -04
 #  Altered: dom 21 dez 2025 11:47:51 -04
-#  Updated: sáb 27 dez 2025 03:43:51 -04
+#  Updated: dom 28 dez 2025 08:07:15 -04
 #
 #  Copyright (c) 2019-2025, Vilmar Catafesta <vcatafesta@gmail.com>
 #  Assembled By Vilmar Catafesta for the ChiliLinux project.
@@ -1912,6 +1912,7 @@ resolve_reindex
 
 if ((REINDEX_ALL)) ; then
 	REINDEX_FORCE=1
+  dedup_repo
 	SIGN_ONLY=1
 	sign_only
 	create_repodata
