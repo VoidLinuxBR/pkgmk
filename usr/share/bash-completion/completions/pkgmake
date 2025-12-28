@@ -19,10 +19,21 @@ _pkgmake() {
       -s --sign
       -i --install
       -f --force
+      -s --syncdeps
+      -q --quiet
+      -v --verbose
+      -c --clean
+      -p --print-config
+      -k --pkgdest
+      -d --debug
+      -h --help
       --sign-only
       --reindex
       --reindex-only
       --reindex-all
+      --gen-key
+      --privkey
+      --dedup-repo
    "
 
    # -------------------------------------------------
