@@ -75,7 +75,6 @@ CLI_VERBOSE=""
 
 GEN_KEY=0
 KEY_FILE="privkey.pem"
-PRINTCONFIG=0
 
 PKGDEST=""
 CLI_PKGDEST=""
@@ -84,6 +83,7 @@ REINDEX_FORCE="${REINDEX_FORCE:-0}"
 CLI_REINDEX=
 REINDEX_ONLY=0
 REINDEX_ALL=0
+PRINTCONFIG=0
 IS_INSTALL_CREATED=0
 
 # Sites globais (compatibilidade xbps-src)
@@ -578,15 +578,13 @@ validate_config() {
 
 	# PACKAGER (se definido)
 	if [[ -n "$PACKAGER" ]]; then
-		[[ "$PACKAGER" == *"<"*">"* ]] ||
-			die "PACKAGER inválido (esperado: Nome <email>)"
+		[[ "$PACKAGER" == *"<"*">"* ]] || die "PACKAGER inválido (esperado: Nome <email>)"
 	fi
 
 	# Assinatura
 	if [[ "$SIGNPKG" -eq 1 ]]; then
 		if [[ -n "$PRIVKEY" ]]; then
-			[[ -f "$PRIVKEY" ]] ||
-				die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
+			[[ -f "$PRIVKEY" ]] || die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
 		else
 			find_privkey || die "SIGNPKG=1, mas nenhuma chave privada encontrada"
 		fi
@@ -633,6 +631,20 @@ cmd_run() {
 	[[ $rc -eq 0 ]] || die "comando falhou: \n$*"
 }
 
+readconf() {
+   local msg="$1"
+   local color="${2:-${red}}"
+
+    echo -n -e "$color"
+    read -r -p "$msg [S/n]"
+    echo -n -e "$reset"
+    case "${REPLY^}" in
+    [SY]) return 0 ;;
+    "") return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
 die() {
 	echo -e "${red}ERRO: $*${reset}" >&2
 	exit 1
@@ -666,13 +678,15 @@ EOF
 }
 
 gen_key() {
-	[[ -f "$KEY_FILE" ]] && die "chave já existe: $KEY_FILE"
-
-	msg "Gerando chave RSA 4096 bits (PEM): $KEY_FILE"
-	cmd_run ssh-keygen -t rsa -b 4096 -m PEM -f "$KEY_FILE"
-
-	msg "Chave gerada com sucesso:"
-	msg "$KEY_FILE"
+    if [[ -f "$HOME/.ssh/$KEY_FILE" ]]; then
+        if ! readconf "Chave '$HOME/.ssh/${KEY_FILE}' já existe! Sobrescrever?" ; then
+    	    die "chave já existe: $KEY_FILE"
+        fi
+        rm -f "$HOME/.ssh/$KEY_FILE"
+    fi
+   	msg "Gerando chave RSA 4096 bits (PEM): $KEY_FILE"
+   	cmd_run ssh-keygen -t rsa -b 4096 -m PEM -f "$HOME/.ssh/$KEY_FILE"
+   	msg "Chave gerada com sucesso: $HOME/.ssh/$KEY_FILE"
 }
 
 normalize_dep_patterns() {
@@ -712,37 +726,6 @@ normalize_dep_patterns() {
 	#   echo "depends     ${depends[*]}"
 	#   echo "makedepends ${makedepends[*]}"
 	#   exit 0
-}
-
-normalize_dep_patternsOLD() {
-	local var i dep
-
-	for var in depends makedepends; do
-		declare -p "$var" &>/dev/null || continue
-		declare -n arr="$var"
-
-		# remove elementos vazios
-		arr=("${arr[@]}")
-
-		for i in "${!arr[@]}"; do
-			dep="${arr[$i]}"
-
-			[[ -n "$dep" ]] || continue
-			[[ "$dep" == "()" ]] && continue
-
-			if ! [[ "$dep" =~ [\<\>\=] ]]; then
-				arr[$i]="${dep}>=0"
-			fi
-		done
-
-		# remove efetivamente os descartados
-		arr=("${arr[@]/()/}")
-		arr=("${arr[@]}") # recompacta
-	done
-
-	#debug
-	#echo ${makedepends[*]}
-	#exit 0
 }
 
 normalize_deps() {
@@ -847,22 +830,6 @@ sync_deps() {
 		else
 			clean+=("$(strip_dep_op "$d")")
 		fi
-	done
-
-	cmd_run sudo xbps-install -Sy "${clean[@]}"
-}
-
-sync_deps_OLD() {
-	[[ "$SYNCDEPS" -eq 1 ]] || return 0
-
-	local pkgs=()
-	[[ -n "${makedepends[*]}" ]] && pkgs+=("${makedepends[@]}")
-	#	[[ -n "${depends[*]}" ]] && pkgs+=("${depends[@]}")
-	[[ "${#pkgs[@]}" -eq 0 ]] && return 0
-
-	local clean=()
-	for d in "${pkgs[@]}"; do
-		clean+=("$(strip_dep_op "$d")")
 	done
 
 	cmd_run sudo xbps-install -Sy "${clean[@]}"
@@ -1026,14 +993,22 @@ detect_src() {
 }
 
 find_privkey() {
-	[[ -n "$PRIVKEY" ]] && return 0
-	for k in "$HOME/.gnupg/privkey.pem" "$HOME/.gnupg/private.pem"; do
-		[[ -f "$k" ]] && {
-			PRIVKEY="$k"
-			return 0
-		}
-	done
-	die "chave privada não encontrada"
+    local aKeys=(
+        "$HOME/.ssh/private.pem"
+        "$HOME/.ssh/privkey.pem"
+        "$HOME/.gnupg/private.pem"
+        "$HOME/.gnupg/privkey.pem"
+    )
+
+    [[ -n "$PRIVKEY" ]] && return 0
+    for k in "${aKeys[@]}"; do
+        [[ -f "$k" ]] && {
+            PRIVKEY="$k"
+            msg "Chave encontrada em : $k"
+            return 0
+        }
+    done
+    die "chave privada não encontrada"
 }
 
 sh_create_INSTALL() {
@@ -1420,49 +1395,6 @@ ${bold}Exemplos:${reset}
 "
 }
 
-create_repodataOLD1() {
-	msg "Recreate repodata : $PKGDEST/x86_64-repodata"
-	cmd_run xbps-rindex -r "$PKGDEST"
-	cmd_run xbps-rindex -a "$PKGDEST"/*.xbps
-}
-
-create_repodataOLD2() {
-	msg "Recreate repodata (hard reset)"
-
-	# remove TODO estado antigo
-	rm -f "$PKGDEST"/*-repodata
-
-	# recria índice vazio
-	cmd_run xbps-rindex -r "$PKGDEST"
-
-	# adiciona pacotes UM A UM (igual xbps-src)
-	local p
-	for p in "$PKGDEST"/*.xbps; do
-		[[ -f "$p" ]] || continue
-		cmd_run xbps-rindex -a "$p"
-	done
-
-	# assina o índice (se habilitado)
-	if [[ "$SIGNPKG" -eq 1 ]]; then
-		if [[ -n "$PRIVKEY" ]]; then
-			if [[ ! -f "$PRIVKEY" ]]; then
-				die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
-			fi
-		else
-			find_privkey || die "Nenhuma chave privada encontrada para assinatura"
-		fi
-
-		local signedby=()
-		[[ -n "$PACKAGER" ]] && signedby=(--signedby "$PACKAGER")
-
-		cmd_run xbps-rindex \
-			--sign \
-			"${signedby[@]}" \
-			--privkey "$PRIVKEY" \
-			"$PKGDEST"
-	fi
-}
-
 create_repodata() {
 	case "$REINDEX_FORCE" in
 	1)
@@ -1512,26 +1444,6 @@ create_repodata() {
 	fi
 }
 
-sign_onlyOLD() {
-	if [[ -n "$PRIVKEY" ]]; then
-		[[ ! -f "$PRIVKEY" ]] && die "PRIVKEY definido, mas chave não encontrada: $PRIVKEY"
-	else
-		find_privkey || die "Nenhuma chave privada encontrada para assinatura"
-	fi
-
-	shopt -s nullglob
-	local pkgs=("$PKGDEST"/*.xbps)
-	shopt -u nullglob
-
-	[[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote .xbps encontrado em $PKGDEST"
-
-	for pkg in "${pkgs[@]}"; do
-		msg "Sign package: ${yellow}$(basename "$pkg")${rst}"
-		rm -f "$pkg.sig2"
-		cmd_run xbps-rindex --sign-pkg --privkey "$PRIVKEY" "$pkg"
-	done
-}
-
 sign_only() {
 	local PKGOUT="$1"
 
@@ -1559,6 +1471,7 @@ sign_only() {
 		done
 	fi
 
+    msg "Usando chave: $PRIVKEY"
 	shopt -u nullglob
 	[[ "${#pkgs[@]}" -gt 0 ]] || die "nenhum pacote sem assinar em $PKGDEST"
 
