@@ -672,7 +672,7 @@ gen_key() {
 	cmd_run ssh-keygen -t rsa -b 4096 -m PEM -f "$KEY_FILE"
 
 	msg "Chave gerada com sucesso:"
-	msg "  $KEY_FILE"
+	msg "$KEY_FILE"
 }
 
 normalize_dep_patterns() {
@@ -1090,11 +1090,6 @@ sh_create_INSTALL() {
 }
 
 run_all() {
-	if ((GEN_KEY)); then
-		gen_key
-		exit 0
-	fi
-
 	# -------------------------------------------------
 	# Lint
 	# -------------------------------------------------
@@ -1892,6 +1887,12 @@ while [[ $# -gt 0 ]]; do
 	*) die "opção inválida: $1" ;;
 	esac
 done
+
+
+if ((GEN_KEY)); then
+    gen_key
+    exit 0
+fi
 
 parse_config
 resolve_reindex
