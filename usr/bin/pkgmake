@@ -749,7 +749,7 @@ load_pkgfile() {
 	# limpa possíveis funções herdadas do framework
 	unset -f package build prepare check install pre_install post_install 2>/dev/null || true
 
-	[[ -f "PKGFILE" ]] || die "PKGFILE não encontrado"
+	[[ -f "PKGFILE" ]] || die "PKGFILE não encontrado\nUse $APP --help"
 
 	# carrega PKGFILE no shell principal
 	source "PKGFILE"
