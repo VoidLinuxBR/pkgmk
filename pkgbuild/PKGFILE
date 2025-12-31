@@ -6,21 +6,22 @@ pkgdesc="makepkg-like tool for XBPS"
 pkgver=$(date +%Y%m%d)
 pkgrel=$(date +%H%M)
 arch=('any')
-license=('GPL3')
+license=('MIT')
 url="https://github.com/voidlinuxbr/$pkgname"
 provides=("$pkgname")
 source=("git+${url}.git")
 md5sums=('SKIP')
 depends=(
-   bash
+	base-devel
+	bash
 	curl
 	git
 	xbps
 	xbps-triggers
 	coreutils
-   base-devel
 )
-backup=( /etc/pkgmake.conf )
+#conf_files=( /etc/pkgmake.conf /etc/vilmar.conf )
+backup=(/etc/pkgmake.conf)
 
 # Automatically detect and use the correct install file
 if [ -e "${pkgname}.install" ]; then
@@ -43,6 +44,6 @@ package() {
 		fi
 	done
 
-#	install -Dm644 etc/pkgmake.conf $DESTDIR/etc/pkgmake.conf.new-${pkgver}-${pkgrel}
+	#	install -Dm644 etc/pkgmake.conf $DESTDIR/etc/pkgmake.conf.new-${pkgver}-${pkgrel}
 	install -Dm644 etc/pkgmake.conf $DESTDIR/etc/pkgmake.conf.new
 }
