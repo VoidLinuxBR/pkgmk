@@ -121,12 +121,36 @@ makedepends=(
 )
 
 build() {
-    cd "$srcdir/$pkgname-$pkgver"
-    ./configure --prefix=/opt/samba
-	make W=1 -j$(nproc)
+	msg "Samba build (clean env, simulated shell)"
+	cd "$srcdir/$pkgname-$pkgver"
+
+	env -i \
+		PATH="/usr/bin:/bin" \
+		HOME="$HOME" \
+		USER="$USER" \
+		LANG="${LANG:-C}" \
+		TERM="${TERM:-xterm}" \
+		./configure --prefix=/opt/samba ||
+		{
+			msg "configure falhou"
+			return 1
+		}
+
+	env -i \
+		PATH="/usr/bin:/bin" \
+		HOME="$HOME" \
+		USER="$USER" \
+		LANG="${LANG:-C}" \
+		TERM="${TERM:-xterm}" \
+		make -j$(nproc) ||
+		{
+			msg "make falhou"
+			return 1
+		}
+
 }
 
 package() {
-    cd "$srcdir/$pkgname-$pkgver"
-    make DESTDIR="$pkgdir" install
+	cd "$srcdir/$pkgname-$pkgver"
+	make DESTDIR="$pkgdir" install
 }
