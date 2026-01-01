@@ -71,7 +71,7 @@ Este método:
 - não requer git
 - instala os mesmos arquivos do método via Makefile
 - **não sobrescreve** configurações existentes
-- cria `/etc/pkgmake.conf.pacnew` quando necessário
+- cria `/etc/pkgmake.conf.new` quando necessário
 
 ### 3. Instalação via repositório XBPS (recomendado)
 
