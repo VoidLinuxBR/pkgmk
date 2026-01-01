@@ -13,7 +13,6 @@ Ela automatiza o processo de:
 - gerenciamento de repositório local
 
 O funcionamento é **totalmente controlado por flags**.  
-Não existem subcomandos.
 
 FUNCIONALIDADES
 ----------------
@@ -34,7 +33,7 @@ DOWNLOAD E INSTALAÇÃO
 
 ```bash
 # Clone o repositório
-git clone --depth=1 https://github.com/<usuario>/pkgmake.git
+git clone --depth=1 https://github.com/voidlinuxbr/pkgmake.git
 
 # entre no diretório
 cd pkgmake
