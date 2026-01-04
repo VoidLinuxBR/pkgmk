@@ -82,12 +82,12 @@ for f in "$TMPDIR"/share/*; do
   install -Dm644 "$f" "$SHARE_DIR/$(basename "$f")"
 done
 
-# Instala configuração (estilo pacnew)
+# Instala configuração (estilo new)
 if [[ "$HAS_CONF" -eq 1 ]]; then
   if [[ -f "$CONF_DEST" ]]; then
     info "Configuração existente encontrada em $CONF_DEST"
-    info "Instalando nova configuração como ${CONF_DEST}.pacnew"
-    install -Dm644 "$TMPDIR/pkgmake.conf" "${CONF_DEST}.pacnew"
+    info "Instalando nova configuração como ${CONF_DEST}.new"
+    install -Dm644 "$TMPDIR/pkgmake.conf" "${CONF_DEST}.new"
   else
     info "Instalando configuração padrão em $CONF_DEST"
     install -Dm644 "$TMPDIR/pkgmake.conf" "$CONF_DEST"
