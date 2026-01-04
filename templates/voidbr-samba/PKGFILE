@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# NOTE: This PKGFILE is PARTIAL and MUST be reviewed
 # Maintainer: Vilmar Catafesta <vcatafesta@gmail.com>
 
 pkgname=voidbr-samba
