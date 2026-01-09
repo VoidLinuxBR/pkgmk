@@ -873,7 +873,7 @@ fetch() {
 				msg "Usando repositório git existente: $cname"
 			else
 				msg "Fetching: ${yellow}$s${rst}"
-				cmd_run git clone "$repo" "$cname" || die "falha ao clonar $repo"
+				cmd_run git clone --depth=1 "$repo" "$cname" || die "falha ao clonar $repo"
 			fi
 
 			if [[ -n "$tag" ]]; then
@@ -1215,7 +1215,7 @@ run_all() {
 			sudo xbps-install -R "$PKGDEST" -S "$pkgname"
 		fi
 	else
-		cmd_run xbps-install --dry-run -R "$PKGDEST" -S "$pkgname"
+		cmd_run sudo xbps-install --dry-run -R "$PKGDEST" -S "$pkgname"
 		msg "Install with: ${yellow}sudo /usr/bin/xbps-install -R $PKGDEST -S $pkgname${rst}"
 	fi
 }
